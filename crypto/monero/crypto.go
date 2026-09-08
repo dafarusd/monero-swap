@@ -298,3 +298,17 @@ func SumPrivateViewKeys(a, b *PrivateViewKey) *PrivateViewKey {
 		key: s,
 	}
 }
+
+// NewPrivateViewKeyFromBytes returns a PrivateViewKey from its canonical 32-byte
+// little-endian encoding. Added for the XmrSwap flow, where the counterparty's
+// one-time private view key arrives on-chain without a spend key.
+func NewPrivateViewKeyFromBytes(b []byte) (*PrivateViewKey, error) {
+	if len(b) != privateKeySize {
+		return nil, errInvalidInput
+	}
+	vk, err := ed25519.NewScalar().SetCanonicalBytes(b)
+	if err != nil {
+		return nil, err
+	}
+	return &PrivateViewKey{key: vk}, nil
+}

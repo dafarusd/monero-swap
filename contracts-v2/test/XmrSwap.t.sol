@@ -20,6 +20,7 @@ contract XmrSwapTest is Test {
     address payable feeWallet = payable(makeAddr("feeWallet"));
     address payable maker = payable(makeAddr("maker"));
     address payable taker = payable(makeAddr("taker"));
+    address payable makerPayout = payable(makeAddr("makerPayout"));
     address stranger = makeAddr("stranger");
 
     uint16 constant FEE_BPS = 15;
@@ -52,14 +53,14 @@ contract XmrSwapTest is Test {
     function _postEthOffer() internal returns (bytes32 offerId) {
         vm.prank(maker);
         offerId = swap.postOffer(
-            address(0), 0.01 ether, 1 ether, 15e12 /* 15 XMR per ETH */, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW
+            address(0), 0.01 ether, 1 ether, 15e12 /* 15 XMR per ETH */, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout
         );
     }
 
     function _postTokenOffer() internal returns (bytes32 offerId) {
         vm.prank(maker);
         offerId = swap.postOffer(
-            address(token), 10e6, 1000e6, 6_666_666_666_666_666_666_666 /* piconero per 1e18 base units */, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW
+            address(token), 10e6, 1000e6, 6_666_666_666_666_666_666_666 /* piconero per 1e18 base units */, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout
         );
     }
 
@@ -69,7 +70,7 @@ contract XmrSwapTest is Test {
     }
 
     function _stage(bytes32 swapId) internal view returns (XmrSwap.Stage st) {
-        (, , , , , , , , st) = swap.swaps(swapId);
+        (, , , , , , , , , st) = swap.swaps(swapId);
     }
 
     // ------------------------------------------------------------ constructor
@@ -94,9 +95,10 @@ contract XmrSwapTest is Test {
     function test_postOffer_storesAndEmits() public {
         vm.prank(maker);
         vm.expectEmit(false, true, true, true);
-        emit XmrSwap.OfferPosted(bytes32(0), maker, address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW);
-        bytes32 id = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW);
-        (address m, address a, uint128 mn, uint128 mx, uint256 px, , , , bytes32 sp, bytes32 vp, bool active) = swap.offers(id);
+        emit XmrSwap.OfferPosted(bytes32(0), maker, address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days));
+        bytes32 id = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout);
+        (address m, address po, address a, uint128 mn, uint128 mx, uint256 px, , , , bytes32 sp, bytes32 vp, bool active) = swap.offers(id);
+        assertEq(po, makerPayout);
         assertEq(m, maker); assertEq(a, address(0)); assertEq(mn, 0.01 ether); assertEq(mx, 1 ether);
         assertEq(px, 15e12); assertEq(sp, makerPub); assertEq(vp, MAKER_VIEW); assertTrue(active);
     }
@@ -105,28 +107,34 @@ contract XmrSwapTest is Test {
         uint64 exp = uint64(block.timestamp + 1 days);
         vm.startPrank(maker);
         vm.expectRevert(XmrSwap.ZeroKey.selector);
-        swap.postOffer(address(0), 1, 2, 1, exp, T1, T2, bytes32(0), MAKER_VIEW);
+        swap.postOffer(address(0), 1, 2, 1, exp, T1, T2, bytes32(0), MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.ZeroKey.selector);
-        swap.postOffer(address(0), 1, 2, 1, exp, T1, T2, makerPub, bytes32(0));
+        swap.postOffer(address(0), 1, 2, 1, exp, T1, T2, makerPub, bytes32(0), makerPayout);
         vm.expectRevert(XmrSwap.BadAmounts.selector);
-        swap.postOffer(address(0), 0, 2, 1, exp, T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 0, 2, 1, exp, T1, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.BadAmounts.selector);
-        swap.postOffer(address(0), 3, 2, 1, exp, T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 3, 2, 1, exp, T1, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.BadAmounts.selector);
-        swap.postOffer(address(0), 1, 2, 0, exp, T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 1, 2, 0, exp, T1, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.TimeoutTooShort.selector);
-        swap.postOffer(address(0), 1, 2, 1, exp, 59 minutes, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 1, 2, 1, exp, 59 minutes, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.TimeoutTooShort.selector);
-        swap.postOffer(address(0), 1, 2, 1, exp, T1, 59 minutes, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 1, 2, 1, exp, T1, 59 minutes, makerPub, MAKER_VIEW, makerPayout);
         vm.expectRevert(XmrSwap.OfferExpired.selector);
-        swap.postOffer(address(0), 1, 2, 1, uint64(block.timestamp), T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 1, 2, 1, uint64(block.timestamp), T1, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.stopPrank();
+    }
+
+    function test_postOffer_rejectsZeroPayout() public {
+        vm.prank(maker);
+        vm.expectRevert(XmrSwap.ZeroAddress.selector);
+        swap.postOffer(address(0), 1, 2, 1, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, payable(address(0)));
     }
 
     function test_offerIds_unique() public {
         bytes32 a = _postEthOffer();
         vm.prank(maker);
-        bytes32 b = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, pubs[4], MAKER_VIEW);
+        bytes32 b = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, pubs[4], MAKER_VIEW, makerPayout);
         assertTrue(a != b);
     }
 
@@ -134,18 +142,18 @@ contract XmrSwapTest is Test {
         _postEthOffer();
         vm.prank(maker);
         vm.expectRevert(XmrSwap.KeyAlreadyUsed.selector);
-        swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout);
         // a different maker cannot reuse it either
         vm.prank(stranger);
         vm.expectRevert(XmrSwap.KeyAlreadyUsed.selector);
-        swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW);
+        swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout);
     }
 
     function test_takeOffer_rejectsReusedTakerKey() public {
         bytes32 id1 = _postEthOffer();
         _takeEth(id1, 0.5 ether);
         vm.prank(maker);
-        bytes32 id2 = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, pubs[4], MAKER_VIEW);
+        bytes32 id2 = swap.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, pubs[4], MAKER_VIEW, makerPayout);
         vm.prank(taker);
         vm.expectRevert(XmrSwap.KeyAlreadyUsed.selector);
         swap.takeOffer{value: 0.5 ether}(id2, 0.5 ether, takerPub, TAKER_VIEW);
@@ -162,7 +170,7 @@ contract XmrSwapTest is Test {
         swap.cancelOffer(id);
         vm.prank(maker);
         swap.cancelOffer(id);
-        (, , , , , , , , , , bool active) = swap.offers(id);
+        (, , , , , , , , , , , bool active) = swap.offers(id);
         assertFalse(active);
         vm.prank(maker);
         vm.expectRevert(XmrSwap.OfferNotActive.selector);
@@ -182,11 +190,12 @@ contract XmrSwapTest is Test {
         emit XmrSwap.SwapCreated(bytes32(0), id, taker, 0.5 ether, 7.5e12, takerPub, TAKER_VIEW, uint64(t0 + T1), uint64(t0 + T1 + T2));
         bytes32 sid = swap.takeOffer{value: 0.5 ether}(id, 0.5 ether, takerPub, TAKER_VIEW);
         assertEq(address(swap).balance, 0.5 ether);
-        (address tk, address mk, address a, uint256 v, bytes32 mp, bytes32 tp, uint64 t1, uint64 t2, XmrSwap.Stage st) = swap.swaps(sid);
+        (address tk, address mk, address po, address a, uint256 v, bytes32 mp, bytes32 tp, uint64 t1, uint64 t2, XmrSwap.Stage st) = swap.swaps(sid);
+        assertEq(po, makerPayout);
         assertEq(tk, taker); assertEq(mk, maker); assertEq(a, address(0)); assertEq(v, 0.5 ether);
         assertEq(mp, makerPub); assertEq(tp, takerPub); assertEq(t1, t0 + T1); assertEq(t2, t0 + T1 + T2);
         assertEq(uint8(st), uint8(XmrSwap.Stage.PENDING));
-        (, , , , , , , , , , bool active) = swap.offers(id);
+        (, , , , , , , , , , , bool active) = swap.offers(id);
         assertFalse(active, "offer is single-use");
     }
 
@@ -226,7 +235,7 @@ contract XmrSwapTest is Test {
         bytes32 sid = swap.takeOffer(id, 500e6, takerPub, TAKER_VIEW);
         vm.stopPrank();
         assertEq(token.balanceOf(address(swap)), 500e6);
-        (, , address a, uint256 v, , , , , ) = swap.swaps(sid);
+        (, , , address a, uint256 v, , , , , ) = swap.swaps(sid);
         assertEq(a, address(token)); assertEq(v, 500e6);
     }
 
@@ -264,12 +273,12 @@ contract XmrSwapTest is Test {
         bytes32 sid = _takeEth(_postEthOffer(), 0.5 ether);
         vm.prank(taker); swap.setReady(sid);
         uint256 fee = 0.5 ether * uint256(FEE_BPS) / 10_000; // 0.00075 ETH
-        uint256 makerBefore = maker.balance; uint256 feeBefore = feeWallet.balance;
+        uint256 makerBefore = makerPayout.balance; uint256 feeBefore = feeWallet.balance;
         vm.prank(maker);
         vm.expectEmit(true, false, false, true);
         emit XmrSwap.Claimed(sid, makerSecret, 0.5 ether - fee, fee);
         swap.claim(sid, makerSecret);
-        assertEq(maker.balance - makerBefore, 0.5 ether - fee);
+        assertEq(makerPayout.balance - makerBefore, 0.5 ether - fee);
         assertEq(feeWallet.balance - feeBefore, fee);
         assertEq(fee, 0.00075 ether);
         assertEq(address(swap).balance, 0);
@@ -327,7 +336,7 @@ contract XmrSwapTest is Test {
         vm.prank(maker);
         swap.claim(sid, makerSecret);
         uint256 fee = 500e6 * uint256(FEE_BPS) / 10_000; // 0.75 MUSD
-        assertEq(token.balanceOf(maker), 500e6 - fee);
+        assertEq(token.balanceOf(makerPayout), 500e6 - fee);
         assertEq(token.balanceOf(feeWallet), fee);
         assertEq(token.balanceOf(address(swap)), 0);
     }
@@ -335,13 +344,13 @@ contract XmrSwapTest is Test {
     function test_claim_zeroFeeContract() public {
         XmrSwap free = new XmrSwap(0, payable(address(0)));
         vm.prank(maker);
-        bytes32 id = free.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW);
+        bytes32 id = free.postOffer(address(0), 0.01 ether, 1 ether, 15e12, uint64(block.timestamp + 1 days), T1, T2, makerPub, MAKER_VIEW, makerPayout);
         vm.prank(taker);
         bytes32 sid = free.takeOffer{value: 0.5 ether}(id, 0.5 ether, takerPub, TAKER_VIEW);
         vm.prank(taker); free.setReady(sid);
-        uint256 before = maker.balance;
+        uint256 before = makerPayout.balance;
         vm.prank(maker); free.claim(sid, makerSecret);
-        assertEq(maker.balance - before, 0.5 ether);
+        assertEq(makerPayout.balance - before, 0.5 ether);
     }
 
     // ------------------------------------------------------------ refund
@@ -444,10 +453,10 @@ contract XmrSwapTest is Test {
         amount = uint96(bound(amount, 0.01 ether, 1 ether));
         bytes32 sid = _takeEth(_postEthOffer(), amount);
         vm.prank(taker); swap.setReady(sid);
-        uint256 mb = maker.balance; uint256 fb = feeWallet.balance;
+        uint256 mb = makerPayout.balance; uint256 fb = feeWallet.balance;
         vm.prank(maker); swap.claim(sid, makerSecret);
         uint256 fee = uint256(amount) * uint256(FEE_BPS) / 10_000;
-        assertEq(maker.balance - mb, amount - fee);
+        assertEq(makerPayout.balance - mb, amount - fee);
         assertEq(feeWallet.balance - fb, fee);
         assertEq(address(swap).balance, 0);
     }

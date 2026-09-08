@@ -42,7 +42,8 @@ contract XmrSwap is ReentrancyGuard {
 
     /// @dev One offer = one swap. Keys are one-time; the maker posts a fresh offer after each take.
     struct Offer {
-        address payable maker;      // receives the payment
+        address maker;              // posted the offer; may cancel it and claim the swap
+        address payable payout;     // receives the payment (any wallet the maker chooses)
         address asset;              // address(0) = ETH, otherwise ERC-20
         uint128 minAmount;          // smallest payment the taker may lock, in asset base units
         uint128 maxAmount;          // largest payment the taker may lock
@@ -56,8 +57,9 @@ contract XmrSwap is ReentrancyGuard {
     }
 
     struct Swap {
-        address payable taker;      // may refund
-        address payable maker;      // may claim
+        address payable taker;      // may refund; receives the refund
+        address maker;              // may claim
+        address payable payout;     // receives the payment
         address asset;
         uint256 value;              // amount locked
         bytes32 makerSpendPub;      // claim commitment: claim(secret) must derive this key
@@ -78,6 +80,7 @@ contract XmrSwap is ReentrancyGuard {
 
     // ---------------------------------------------------------------- events
 
+    /// @dev Keys, timeouts and payout are in `offers(offerId)`.
     event OfferPosted(
         bytes32 indexed offerId,
         address indexed maker,
@@ -85,11 +88,7 @@ contract XmrSwap is ReentrancyGuard {
         uint256 minAmount,
         uint256 maxAmount,
         uint256 xmrPerAsset,
-        uint64 expiry,
-        uint64 timeout1Duration,
-        uint64 timeout2Duration,
-        bytes32 makerSpendPub,
-        bytes32 makerViewPriv
+        uint64 expiry
     );
     event OfferCancelled(bytes32 indexed offerId);
     /// @dev Maker key material and asset are in the offer (still readable after the take).
@@ -151,8 +150,10 @@ contract XmrSwap is ReentrancyGuard {
         uint64 timeout1Duration,
         uint64 timeout2Duration,
         bytes32 makerSpendPub,
-        bytes32 makerViewPriv
+        bytes32 makerViewPriv,
+        address payable payout
     ) external returns (bytes32 offerId) {
+        if (payout == address(0)) revert ZeroAddress();
         if (makerSpendPub == bytes32(0) || makerViewPriv == bytes32(0)) revert ZeroKey();
         if (minAmount == 0 || maxAmount < minAmount || xmrPerAsset == 0) revert BadAmounts();
         if (timeout1Duration < MIN_TIMEOUT || timeout2Duration < MIN_TIMEOUT) revert TimeoutTooShort();
@@ -162,7 +163,8 @@ contract XmrSwap is ReentrancyGuard {
 
         offerId = keccak256(abi.encodePacked(block.chainid, address(this), msg.sender, _nonce++));
         offers[offerId] = Offer({
-            maker: payable(msg.sender),
+            maker: msg.sender,
+            payout: payout,
             asset: asset,
             minAmount: minAmount,
             maxAmount: maxAmount,
@@ -175,19 +177,7 @@ contract XmrSwap is ReentrancyGuard {
             active: true
         });
 
-        emit OfferPosted(
-            offerId,
-            msg.sender,
-            asset,
-            minAmount,
-            maxAmount,
-            xmrPerAsset,
-            expiry,
-            timeout1Duration,
-            timeout2Duration,
-            makerSpendPub,
-            makerViewPriv
-        );
+        emit OfferPosted(offerId, msg.sender, asset, minAmount, maxAmount, xmrPerAsset, expiry);
     }
 
     /// @notice Withdraw an offer that has not been taken.
@@ -235,6 +225,7 @@ contract XmrSwap is ReentrancyGuard {
         swaps[swapId] = Swap({
             taker: payable(msg.sender),
             maker: o.maker,
+            payout: o.payout,
             asset: o.asset,
             value: amount,
             makerSpendPub: o.makerSpendPub,
@@ -278,7 +269,7 @@ contract XmrSwap is ReentrancyGuard {
         uint256 fee = (s.value * feeBps) / BPS;
         uint256 payout = s.value - fee;
 
-        _pay(s.asset, s.maker, payout);
+        _pay(s.asset, s.payout, payout);
         if (fee != 0) _pay(s.asset, feeRecipient, fee);
 
         emit Claimed(swapId, secret, payout, fee);
