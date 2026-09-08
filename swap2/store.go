@@ -39,6 +39,7 @@ type OfferRec struct {
 	TxHash      string `json:"tx_hash"`
 	Active      bool   `json:"active"`
 	SwapID      string `json:"swap_id,omitempty"`
+	TakeChecked bool   `json:"take_checked,omitempty"` // inactive offer confirmed to have no take
 }
 
 // SwapRec is one swap in progress or finished, from our side.

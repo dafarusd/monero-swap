@@ -96,10 +96,11 @@ func (m *Maker) Run(ctx context.Context) error {
 
 // reconcileOffers detects takes of our offers, retires expired ones, and keeps one live.
 func (m *Maker) reconcileOffers(ctx context.Context) error {
+	// Offers to look at: live ones, plus inactive ones we have not yet matched to a take.
 	var active []*OfferRec
 	m.cfg.Store.View(func(st *State) {
 		for _, o := range st.Offers {
-			if o.Active {
+			if o.TxHash != "" && o.SwapID == "" && (o.Active || !o.TakeChecked) {
 				cp := *o
 				active = append(active, &cp)
 			}
@@ -133,14 +134,18 @@ func (m *Maker) reconcileOffers(ctx context.Context) error {
 			continue
 		}
 		// not active on chain: taken or cancelled. Look for the take.
+		// SwapCreated(swapId indexed, offerId indexed, taker indexed, ...): offerId is topic[2].
 		logs, err := m.cfg.Chain.Logs(ctx, o.PostedBlock, head,
-			[][]ethcommon.Hash{{m.cfg.Chain.EventID("SwapCreated")}, {id}})
+			[][]ethcommon.Hash{{m.cfg.Chain.EventID("SwapCreated")}, nil, {id}})
 		if err != nil {
 			return err
 		}
 		if len(logs) == 0 {
 			log.Printf("maker: offer %s inactive with no take (cancelled?)", short(o.OfferID))
-			_ = m.cfg.Store.Update(func(st *State) { st.Offers[o.OfferID].Active = false })
+			_ = m.cfg.Store.Update(func(st *State) {
+				st.Offers[o.OfferID].Active = false
+				st.Offers[o.OfferID].TakeChecked = true
+			})
 			continue
 		}
 		ev, err := m.cfg.Chain.Contract.ParseSwapCreated(logs[0])
