@@ -2,7 +2,7 @@
 
 Trade Monero for ETH or USDC with a stranger and trust nobody. The contract holds the ETH, the Monero sits at an address both of you control, and the only way the seller gets paid is by handing you the key.
 
-Built on the [Athanor](https://github.com/AthanorLabs/atomic-swap) protocol (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive.
+Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive. What's theirs and what changed is spelled out in [Credit](#credit) below.
 
 **Status: live on Base, unproven with real money.** The contract is deployed on Base mainnet. Five swaps and one refund have run end to end on test networks — Sepolia, Base Sepolia, Monero stagenet, ETH and a test token, command line and browser. No real-money swap has happened yet. Nothing is audited. Start small.
 
@@ -90,6 +90,24 @@ UPSTREAM=http://node.monerodevs.org:18089 node relay/local.mjs
 ```
 
 Then put the relay URL in the box at the top of the page.
+
+## Credit
+
+This repo is a fork of [AthanorLabs/atomic-swap](https://github.com/AthanorLabs/atomic-swap), archived by its owners on 1 September 2026. Their work is why this exists:
+
+- **The protocol.** Buyer locks on Ethereum, seller locks Monero to a shared key, the claim reveals the secret. Joël Gugger's [2020 paper](https://eprint.iacr.org/2020/1126) designed it for Bitcoin; Athanor carried it to Ethereum and ran it on mainnet in June 2023. Nothing about that dance is mine.
+- **The Monero wallet library.** `monero/` and `crypto/monero/` are theirs, untouched except for one added constructor. The seller program drives `monero-wallet-rpc` through their code.
+- **The first test.** The first swap I ran, on 8 September 2026, was their unchanged code on Sepolia and stagenet. It worked, built with Go 1.21.
+
+What changed, and why:
+
+- **New contract.** `contracts-v2/XmrSwap.sol` replaces their `SwapCreator.sol`. The offer board moved on-chain, so there's no peer-to-peer network and no bootnodes to die — theirs were all dead by the time I tried. A fee, fixed at deploy, pays whoever keeps this running. The claim checks the revealed secret against the Monero key directly with an on-chain ed25519 multiply, which is cheap on Base; that removes the secp256k1 side and the cross-curve DLEq proof, the heaviest part of their client. One-time keys can't be reused across swaps. A seller's payout goes to any wallet, never the gas key.
+- **New seller and buyer programs.** `swap2/` and `cmd/monero-swap/` are new. Their `swapd` is still in the tree but nothing here runs it. A failed call retries instead of ending the swap — a node outage killed their buyer's watcher mid-swap in my first run, and only their restart recovery saved it.
+- **A browser buyer.** `web/` is new. Their UI was unmaintained; this one needs only MetaMask.
+- **A relay.** `relay/` is new, because browsers can't call Monero nodes.
+- **Kept their license** for the Go code (LGPL-3.0). The contract, page and relay are MIT. The ed25519 library is Jan Vornberger's, MIT, via Wrapsynth.
+
+If you learned something here, the people to thank are noot, dimalinux and the ChainSafe team.
 
 ## Limits, honestly
 
