@@ -5,9 +5,9 @@ import { ethers } from 'ethers';
 import ABI from './XmrSwap.abi.json' with { type: 'json' };
 
 export const CHAINS = {
-  11155111: { name: 'Sepolia (test)', explorer: 'https://sepolia.etherscan.io', xmrNet: 'stagenet', contract: '0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E' },
-  84532: { name: 'Base Sepolia (test)', explorer: 'https://sepolia.basescan.org', xmrNet: 'stagenet', contract: '0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755' },
-  8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '0x67fe8681563F37f2A8BBed84C85784a678FeC693' },
+  11155111: { name: 'Sepolia (test)', explorer: 'https://sepolia.etherscan.io', xmrNet: 'stagenet', contract: '0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E', relay: 'https://monero-relay-stagenet.dafarusd.workers.dev' },
+  84532: { name: 'Base Sepolia (test)', explorer: 'https://sepolia.basescan.org', xmrNet: 'stagenet', contract: '0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755', relay: 'https://monero-relay-stagenet.dafarusd.workers.dev' },
+  8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '0x67fe8681563F37f2A8BBed84C85784a678FeC693', relay: 'https://monero-relay.dafarusd.workers.dev' },
 };
 const LOG_CHUNK = 2000;
 const ERC20_ABI = ['function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function balanceOf(address) view returns (uint256)', 'function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)'];

@@ -2,4 +2,9 @@ name = "monero-relay"
 main = "worker.js"
 compatibility_date = "2024-09-01"
 [vars]
+UPSTREAM = "http://node.monerodevs.org:18089"
+
+[env.stagenet]
+name = "monero-relay-stagenet"
+[env.stagenet.vars]
 UPSTREAM = "http://xmr-lux.boldsuck.org:38081"
