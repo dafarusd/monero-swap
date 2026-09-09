@@ -4,7 +4,7 @@ Trade Monero for ETH or USDC with a stranger and trust nobody. The contract hold
 
 Built on the [Athanor](https://github.com/AthanorLabs/atomic-swap) protocol (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive.
 
-**Status: test networks only.** Five swaps and one refund have run end to end — on Sepolia and on Base Sepolia, against Monero stagenet, for ETH and for a test token, from the command line and from a browser with MetaMask. Nothing is audited. Nothing is on Base mainnet yet. Don't put real money near it.
+**Status: live on Base, unproven with real money.** The contract is deployed on Base mainnet. Five swaps and one refund have run end to end on test networks — Sepolia, Base Sepolia, Monero stagenet, ETH and a test token, command line and browser. No real-money swap has happened yet. Nothing is audited. Start small.
 
 ## How a swap works
 
