@@ -10,6 +10,21 @@ export const CHAINS = {
   8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '' },
 };
 const LOG_CHUNK = 2000;
+const ERC20_ABI = ['function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function balanceOf(address) view returns (uint256)', 'function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)'];
+const assetCache = new Map();
+
+/** {address, symbol, decimals} for ETH or a token; cached. */
+export async function assetInfo(runner, address) {
+  if (address === ethers.ZeroAddress) return { address, symbol: 'ETH', decimals: 18 };
+  const key = address.toLowerCase();
+  if (assetCache.has(key)) return assetCache.get(key);
+  const t = new ethers.Contract(address, ERC20_ABI, runner);
+  const info = { address, symbol: await t.symbol().catch(() => address.slice(0, 8)), decimals: Number(await t.decimals()) };
+  assetCache.set(key, info);
+  return info;
+}
+export const fmtAmount = (v, decimals) => ethers.formatUnits(v, decimals);
+export const parseAmount = (s, decimals) => ethers.parseUnits(s, decimals);
 
 export async function connect() {
   if (!globalThis.ethereum) throw new Error('No wallet found. Install MetaMask or another browser wallet.');
@@ -45,9 +60,10 @@ export async function listOffers(c, blocksBack = 10000) {
   for (const l of logs) {
     const id = l.args.offerId;
     const o = await c.offers(id);
-    if (!o.active || Number(o.expiry) <= now || o.asset !== ethers.ZeroAddress) continue;
+    if (!o.active || Number(o.expiry) <= now) continue;
+    const asset = await assetInfo(provider, o.asset);
     offers.push({
-      id, maker: o.maker, payout: o.payout, min: o.minAmount, max: o.maxAmount, xmrPerAsset: o.xmrPerAsset,
+      id, maker: o.maker, payout: o.payout, min: o.minAmount, max: o.maxAmount, xmrPerAsset: o.xmrPerAsset, asset,
       expiry: Number(o.expiry), t1: Number(o.timeout1Duration), t2: Number(o.timeout2Duration),
       makerSpendPub: o.makerSpendPub, makerViewPriv: o.makerViewPriv, block: l.blockNumber,
     });
@@ -57,9 +73,24 @@ export async function listOffers(c, blocksBack = 10000) {
 
 export function xmrFor(amountWei, xmrPerAsset) { return (BigInt(amountWei) * BigInt(xmrPerAsset)) / 10n ** 18n; }
 
-/** Locks ETH against an offer. Returns the SwapCreated details. */
-export async function takeOffer(c, offerId, amountWei, spendPub, viewPriv) {
-  const tx = await c.takeOffer(offerId, amountWei, b32(spendPub), b32(viewPriv), { value: amountWei });
+/** Locks ETH or tokens against an offer (approving the token first if needed). Returns the SwapCreated details. */
+export async function takeOffer(c, offerId, amountWei, spendPub, viewPriv, asset, onStatus = () => {}) {
+  let value = 0n;
+  if (asset.address === ethers.ZeroAddress) {
+    value = amountWei;
+  } else {
+    const signer = c.runner;
+    const t = new ethers.Contract(asset.address, ERC20_ABI, signer);
+    const me = await signer.getAddress();
+    const bal = await t.balanceOf(me);
+    if (bal < amountWei) throw new Error(`You hold ${fmtAmount(bal, asset.decimals)} ${asset.symbol}, need ${fmtAmount(amountWei, asset.decimals)}.`);
+    if ((await t.allowance(me, await c.getAddress())) < amountWei) {
+      onStatus(`First approve the contract to take your ${asset.symbol}…`);
+      await (await t.approve(await c.getAddress(), amountWei)).wait();
+      onStatus('Approved. Now confirm the payment…');
+    }
+  }
+  const tx = await c.takeOffer(offerId, amountWei, b32(spendPub), b32(viewPriv), { value });
   const receipt = await tx.wait();
   for (const l of receipt.logs) {
     let p;

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -51,9 +50,10 @@ func main() {
 					Usage: "keep one offer live and serve takers (Ctrl-C to stop; swaps resume on restart)",
 					Flags: []cli.Flag{
 						&cli.StringFlag{Name: "payout", Required: true, Usage: "ETH address that receives payments (your own wallet)"},
-						&cli.StringFlag{Name: "min", Value: "0.02", Usage: "smallest payment in ETH"},
-						&cli.StringFlag{Name: "max", Value: "0.05", Usage: "largest payment in ETH"},
-						&cli.StringFlag{Name: "price", Required: true, Usage: "XMR the buyer gets per 1 ETH, e.g. 15.5"},
+						&cli.StringFlag{Name: "asset", Value: "eth", Usage: "what you accept: eth, or an ERC-20 token address (e.g. USDC)"},
+						&cli.StringFlag{Name: "min", Value: "0.02", Usage: "smallest payment, in whole units of the asset"},
+						&cli.StringFlag{Name: "max", Value: "0.05", Usage: "largest payment, in whole units of the asset"},
+						&cli.StringFlag{Name: "price", Required: true, Usage: "XMR the buyer gets per 1 unit of the asset, e.g. 15.5 for ETH or 0.0066 for USDC"},
 						&cli.DurationFlag{Name: "offer-ttl", Value: 24 * time.Hour, Usage: "how long each offer stays open"},
 						&cli.DurationFlag{Name: "t1", Value: time.Hour, Usage: "time the buyer has to confirm the Monero before you may claim anyway"},
 						&cli.DurationFlag{Name: "t2", Value: time.Hour, Usage: "time after t1 before the buyer may refund regardless"},
@@ -71,7 +71,7 @@ func main() {
 						Usage: "take an offer and run the swap to the end",
 						Flags: []cli.Flag{
 							&cli.StringFlag{Name: "offer", Required: true, Usage: "offer id (hex)"},
-							&cli.StringFlag{Name: "amount", Required: true, Usage: "ETH to pay, e.g. 0.02"},
+							&cli.StringFlag{Name: "amount", Required: true, Usage: "how much to pay, in whole units of the offer's asset, e.g. 0.02"},
 							&cli.StringFlag{Name: "payout-xmr", Usage: "Monero address that receives the coins (default: the program's wallet)"},
 						},
 						Action: runTake,
@@ -171,11 +171,22 @@ func runMaker(c *cli.Context) error {
 		return err
 	}
 	defer e.close()
-	minWei, err := swap2.ParseWei(c.String("min"))
+	var assetAddr ethcommon.Address
+	if a := strings.ToLower(c.String("asset")); a != "eth" && a != "" {
+		if !ethcommon.IsHexAddress(a) {
+			return fmt.Errorf("--asset must be 'eth' or a token address")
+		}
+		assetAddr = ethcommon.HexToAddress(a)
+	}
+	asset, err := swap2.LoadAsset(e.ctx, e.chain.EC, assetAddr)
 	if err != nil {
 		return err
 	}
-	maxWei, err := swap2.ParseWei(c.String("max"))
+	minWei, err := asset.Parse(c.String("min"))
+	if err != nil {
+		return err
+	}
+	maxWei, err := asset.Parse(c.String("max"))
 	if err != nil {
 		return err
 	}
@@ -183,16 +194,18 @@ func runMaker(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("selling XMR for %s: %s to %s per swap, %s XMR per 1 %s", asset.Symbol, asset.Fmt(minWei), asset.Fmt(maxWei), swap2.FmtXMR(price), asset.Symbol)
 	m := swap2.NewMaker(swap2.MakerConfig{
 		Env:         e.env,
 		Chain:       e.chain,
 		Wallet:      e.wallet,
 		Store:       e.store,
 		Payout:      ethcommon.HexToAddress(c.String("payout")),
-		Asset:       ethcommon.Address{},
+		Asset:       assetAddr,
+		AssetInfo:   asset,
 		MinWei:      minWei,
 		MaxWei:      maxWei,
-		XmrPerAsset: new(big.Int).SetUint64(price),
+		XmrPerAsset: asset.XmrPerAsset(price),
 		OfferTTL:    c.Duration("offer-ttl"),
 		Timeout1:    c.Duration("t1"),
 		Timeout2:    c.Duration("t2"),
@@ -227,17 +240,13 @@ func runTake(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	amount, err := swap2.ParseWei(c.String("amount"))
-	if err != nil {
-		return err
-	}
 	id, err := hex.DecodeString(strings.TrimPrefix(c.String("offer"), "0x"))
 	if err != nil || len(id) != 32 {
 		return fmt.Errorf("--offer must be a 32-byte hex id")
 	}
 	var offerID [32]byte
 	copy(offerID[:], id)
-	swapID, err := t.Take(e.ctx, offerID, amount)
+	swapID, err := t.Take(e.ctx, offerID, c.String("amount"))
 	if swapID != "" {
 		log.Printf("swap id: %s", swapID)
 	}
@@ -286,9 +295,13 @@ func runOffers(c *cli.Context) error {
 			continue
 		}
 		n++
-		fmt.Printf("offer %s\n  sells XMR for %s\n  buyer pays %s-%s, gets %s XMR per unit\n  expires %s, t1 %s, t2 %s, maker %s\n",
+		asset, aerr := swap2.LoadAsset(e.ctx, e.chain.EC, o.Asset)
+		if aerr != nil {
+			asset = swap2.Asset{Addr: o.Asset, Symbol: o.Asset.Hex()[:10], Decimals: 18}
+		}
+		fmt.Printf("offer %s\n  sells XMR for %s\n  buyer pays %s to %s, gets %s XMR per 1e18 base units\n  expires %s, t1 %s, t2 %s, maker %s\n",
 			hex.EncodeToString(ev.OfferId[:]), assetLabel(o.Asset),
-			swap2.FmtETH(o.MinAmount), swap2.FmtETH(o.MaxAmount), swap2.FmtXMR(o.XmrPerAsset.Uint64()),
+			asset.Fmt(o.MinAmount), asset.Fmt(o.MaxAmount), swap2.FmtXMR(o.XmrPerAsset.Uint64()),
 			time.Unix(int64(o.Expiry), 0).Format(time.RFC3339), time.Duration(o.Timeout1Duration)*time.Second,
 			time.Duration(o.Timeout2Duration)*time.Second, o.Maker.Hex())
 	}

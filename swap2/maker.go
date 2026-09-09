@@ -36,6 +36,7 @@ type MakerConfig struct {
 	Store       *Store
 	Payout      ethcommon.Address // receives ETH / tokens
 	Asset       ethcommon.Address // zero address = ETH
+	AssetInfo   Asset             // symbol + decimals for display; loaded by the CLI
 	MinWei      *big.Int
 	MaxWei      *big.Int
 	XmrPerAsset *big.Int // piconero per 1e18 base units of asset
@@ -167,7 +168,7 @@ func (m *Maker) reconcileOffers(ctx context.Context) error {
 func (m *Maker) recordTake(ctx context.Context, o *OfferRec, ev *xmrSwapCreated) error {
 	swapID := hex.EncodeToString(ev.SwapId[:])
 	log.Printf("maker: offer %s taken by %s for %s (%s XMR), swap %s",
-		short(o.OfferID), ev.Taker.Hex(), fmtAsset(ev.Value, m.cfg.Asset), FmtXMR(ev.XmrPiconero.Uint64()), short(swapID))
+		short(o.OfferID), ev.Taker.Hex(), m.cfg.AssetInfo.Fmt(ev.Value), FmtXMR(ev.XmrPiconero.Uint64()), short(swapID))
 
 	height, err := m.cfg.Wallet.GetHeight()
 	if err != nil {
@@ -277,9 +278,8 @@ func (m *Maker) postOffer(ctx context.Context) error {
 	if offerID == "" {
 		return fmt.Errorf("postOffer receipt has no OfferPosted event")
 	}
-	log.Printf("maker: posted offer %s: %s-%s %s at %s XMR per unit, expires %s",
-		short(offerID), fmtAsset(m.cfg.MinWei, m.cfg.Asset), fmtAsset(m.cfg.MaxWei, m.cfg.Asset), assetName(m.cfg.Asset),
-		FmtXMR(m.cfg.XmrPerAsset.Uint64()), time.Unix(int64(expiry), 0).Format(time.RFC3339))
+	log.Printf("maker: posted offer %s: %s to %s, expires %s",
+		short(offerID), m.cfg.AssetInfo.Fmt(m.cfg.MinWei), m.cfg.AssetInfo.Fmt(m.cfg.MaxWei), time.Unix(int64(expiry), 0).Format(time.RFC3339))
 
 	return m.cfg.Store.Update(func(st *State) {
 		rec := st.Offers[pending]
@@ -547,16 +547,4 @@ func short(id string) string {
 	return id
 }
 
-func assetName(a ethcommon.Address) string {
-	if a == (ethcommon.Address{}) {
-		return "ETH"
-	}
-	return a.Hex()
-}
 
-func fmtAsset(v *big.Int, a ethcommon.Address) string {
-	if a == (ethcommon.Address{}) {
-		return FmtETH(v)
-	}
-	return v.String()
-}

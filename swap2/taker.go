@@ -12,6 +12,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
+	contracts "github.com/athanorlabs/atomic-swap/ethereum"
+
 	"github.com/athanorlabs/atomic-swap/common"
 	mcrypto "github.com/athanorlabs/atomic-swap/crypto/monero"
 	"github.com/athanorlabs/atomic-swap/monero"
@@ -43,8 +45,9 @@ func NewTaker(cfg TakerConfig) *Taker {
 	return &Taker{cfg: cfg}
 }
 
-// Take locks `amountWei` of ETH against an offer and runs the swap to completion.
-func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountWei *big.Int) (string, error) {
+// Take locks `amountStr` (in whole units of the offer's asset) against an offer and
+// runs the swap to completion.
+func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountStr string) (string, error) {
 	o, err := t.cfg.Chain.Contract.Offers(&bind.CallOpts{Context: ctx}, offerID)
 	if err != nil {
 		return "", fmt.Errorf("read offer: %w", err)
@@ -53,19 +56,51 @@ func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountWei *big.Int) 
 	if err != nil {
 		return "", err
 	}
+	asset, err := LoadAsset(ctx, t.cfg.Chain.EC, o.Asset)
+	if err != nil {
+		return "", err
+	}
+	amountWei, err := asset.Parse(amountStr)
+	if err != nil {
+		return "", err
+	}
 	switch {
 	case !o.Active:
 		return "", fmt.Errorf("offer is not active")
 	case o.Expiry <= now:
 		return "", fmt.Errorf("offer expired")
-	case o.Asset != (ethcommon.Address{}):
-		return "", fmt.Errorf("this command handles ETH offers only (offer asset %s)", o.Asset.Hex())
 	case amountWei.Cmp(o.MinAmount) < 0 || amountWei.Cmp(o.MaxAmount) > 0:
-		return "", fmt.Errorf("amount %s ETH outside offer range %s-%s", FmtETH(amountWei), FmtETH(o.MinAmount), FmtETH(o.MaxAmount))
+		return "", fmt.Errorf("amount %s outside offer range %s to %s", asset.Fmt(amountWei), asset.Fmt(o.MinAmount), asset.Fmt(o.MaxAmount))
 	}
 	xmr := new(big.Int).Mul(amountWei, o.XmrPerAsset)
 	xmr.Div(xmr, big.NewInt(1e18))
-	log.Printf("taker: taking offer %s: pay %s ETH, receive %s XMR", short(hex.EncodeToString(offerID[:])), FmtETH(amountWei), FmtXMR(xmr.Uint64()))
+	log.Printf("taker: taking offer %s: pay %s, receive %s XMR", short(hex.EncodeToString(offerID[:])), asset.Fmt(amountWei), FmtXMR(xmr.Uint64()))
+
+	if !asset.IsETH() {
+		// The contract pulls the tokens with transferFrom; allow it first.
+		erc, err := contracts.NewIERC20(o.Asset, t.cfg.Chain.EC)
+		if err != nil {
+			return "", err
+		}
+		bal, err := erc.BalanceOf(&bind.CallOpts{Context: ctx}, t.cfg.Chain.From)
+		if err != nil {
+			return "", err
+		}
+		if bal.Cmp(amountWei) < 0 {
+			return "", fmt.Errorf("gas wallet holds %s, need %s", asset.Fmt(bal), asset.Fmt(amountWei))
+		}
+		allowance, err := erc.Allowance(&bind.CallOpts{Context: ctx}, t.cfg.Chain.From, t.cfg.Chain.Addr)
+		if err != nil {
+			return "", err
+		}
+		if allowance.Cmp(amountWei) < 0 {
+			if _, err := t.cfg.Chain.Send(ctx, "approve "+asset.Symbol, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+				return erc.Approve(opts, t.cfg.Chain.Addr, amountWei)
+			}); err != nil {
+				return "", err
+			}
+		}
+	}
 
 	kp, err := mcrypto.GenerateKeys()
 	if err != nil {
@@ -90,7 +125,9 @@ func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountWei *big.Int) 
 	}
 
 	receipt, err := t.cfg.Chain.Send(ctx, "takeOffer", func(opts *bind.TransactOpts) (*types.Transaction, error) {
-		opts.Value = amountWei
+		if asset.IsETH() {
+			opts.Value = amountWei
+		}
 		return t.cfg.Chain.Contract.TakeOffer(opts, offerID, amountWei,
 			Bytes32(kp.PublicKeyPair().SpendKey().Bytes()), Bytes32(kp.ViewKey().Bytes()))
 	})
@@ -124,7 +161,7 @@ func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountWei *big.Int) 
 		delete(st.Swaps, pending)
 		rec.SwapID = swapID
 		rec.State = StateETHLocked
-		rec.Asset = ethcommon.Address{}.Hex()
+		rec.Asset = o.Asset.Hex()
 		rec.ValueWei = amountWei.String()
 		rec.XmrPiconero = ev.XmrPiconero.Uint64()
 		rec.TheirSpendPub = hex.EncodeToString(o.MakerSpendPub[:])
@@ -139,8 +176,8 @@ func (t *Taker) Take(ctx context.Context, offerID [32]byte, amountWei *big.Int) 
 	}); err != nil {
 		return "", err
 	}
-	log.Printf("taker: swap %s created; ETH locked. Shared Monero address %s. t1=%s t2=%s",
-		short(swapID), addr, time.Unix(int64(ev.Timeout1), 0).Format(time.Kitchen), time.Unix(int64(ev.Timeout2), 0).Format(time.Kitchen))
+	log.Printf("taker: swap %s created; %s locked. Shared Monero address %s. t1=%s t2=%s",
+		short(swapID), asset.Fmt(amountWei), addr, time.Unix(int64(ev.Timeout1), 0).Format(time.Kitchen), time.Unix(int64(ev.Timeout2), 0).Format(time.Kitchen))
 	return swapID, t.Resume(ctx, swapID)
 }
 

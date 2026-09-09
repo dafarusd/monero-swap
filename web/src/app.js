@@ -92,18 +92,20 @@ async function refreshOffers() {
   for (const o of state.offers) {
     const card = document.createElement('div');
     card.className = 'card';
-    const perEth = m.fmtXMR(o.xmrPerAsset);
+    const a = o.asset;
+    const perUnit = m.fmtXMR((o.xmrPerAsset * 10n ** BigInt(a.decimals)) / 10n ** 18n);
+    const fmt = (v) => e.fmtAmount(v, a.decimals);
     card.innerHTML = `
-      <div class="row"><b>${perEth} XMR per ETH</b><span class="dim">offer ${short(o.id)}</span></div>
-      <div>Pay between ${fmtETH(o.min)} and ${fmtETH(o.max)} ETH. Open until ${when(o.expiry)}.</div>
-      <div class="dim">Seller has ${Math.round(o.t1 / 60)} min to lock the Monero after you pay; if it never shows, your ETH comes back.</div>
+      <div class="row"><b>${perUnit} XMR per ${a.symbol}</b><span class="dim">offer ${short(o.id)}</span></div>
+      <div>Pay between ${fmt(o.min)} and ${fmt(o.max)} ${a.symbol}. Open until ${when(o.expiry)}.</div>
+      <div class="dim">Seller has ${Math.round(o.t1 / 60)} min to lock the Monero after you pay; if it never shows, your ${a.symbol} comes back.</div>
       <div class="row">
-        <label>ETH to pay <input type="number" step="0.001" min="${fmtETH(o.min)}" max="${fmtETH(o.max)}" value="${fmtETH(o.min)}"></label>
+        <label>${a.symbol} to pay <input type="number" step="any" min="${fmt(o.min)}" max="${fmt(o.max)}" value="${fmt(o.min)}"></label>
         <span class="get"></span>
         <button>Take this offer</button>
       </div>`;
     const input = card.querySelector('input'), get = card.querySelector('.get'), btn = card.querySelector('button');
-    const upd = () => { try { get.textContent = `you get ${m.fmtXMR(e.xmrFor(ethers.parseEther(input.value || '0'), o.xmrPerAsset))} XMR`; } catch { get.textContent = ''; } };
+    const upd = () => { try { get.textContent = `you get ${m.fmtXMR(e.xmrFor(e.parseAmount(input.value || '0', a.decimals), o.xmrPerAsset))} XMR`; } catch { get.textContent = ''; } };
     input.oninput = upd; upd();
     btn.onclick = () => takeOffer(o, input.value);
     $('offers').appendChild(card);
@@ -116,7 +118,7 @@ async function takeOffer(o, ethStr) {
   if (!state.wallet) { say('Connect your wallet first.', 'bad'); return; }
   if (!state.settings.node) { say('Set a Monero node relay URL first (top of page).', 'bad'); return; }
   let amount;
-  try { amount = ethers.parseEther(ethStr); } catch { say('Bad amount.', 'bad'); return; }
+  try { amount = e.parseAmount(ethStr, o.asset.decimals); } catch { say('Bad amount.', 'bad'); return; }
   if (amount < o.min || amount > o.max) { say('Amount is outside the offer range.', 'bad'); return; }
 
   // Height first, so the scan later starts before the lock.
@@ -132,6 +134,7 @@ async function takeOffer(o, ethStr) {
     mySpendPriv: m.hex(k.spendPriv), myViewPriv: m.hex(k.viewPriv), mySpendPub: m.hex(k.spendPub),
     theirSpendPub: o.makerSpendPub.slice(2), theirViewPriv: o.makerViewPriv.slice(2),
     sharedAddress: shared.address, restoreHeight, amountWei: amount.toString(), xmrPiconero: e.xmrFor(amount, o.xmrPerAsset).toString(),
+    asset: o.asset.address, symbol: o.asset.symbol, decimals: o.asset.decimals,
     created: Date.now(), lastScanned: restoreHeight - 1, hits: [],
   };
   // Keys are saved before anything is sent. Losing them after paying means losing the Monero.
@@ -141,11 +144,11 @@ async function takeOffer(o, ethStr) {
 
   try {
     say('Confirm the transaction in your wallet…');
-    const r = await e.takeOffer(state.contract, o.id, amount, k.spendPub, k.viewPriv);
+    const r = await e.takeOffer(state.contract, o.id, amount, k.spendPub, k.viewPriv, o.asset, (t) => say(t));
     delete state.swaps[tempId];
     Object.assign(rec, { state: 'eth_locked', swapId: r.swapId, timeout1: r.timeout1, timeout2: r.timeout2, createdBlock: r.block, takeTx: r.txHash, xmrPiconero: r.xmrPiconero.toString() });
     state.swaps[r.swapId] = rec; save();
-    say('ETH locked. Now watching for the Monero.');
+    say(`${o.asset.symbol} locked. Now watching for the Monero.`);
     renderSwaps();
     resumeSwap(r.swapId);
   } catch (err) {
@@ -184,20 +187,21 @@ function renderSwap(id) {
   const s = state.swaps[id];
   const card = $('swap-' + id);
   if (!card) return;
-  const lines = [`<div class="row"><b>${fmtETH(s.amountWei)} ETH → ${m.fmtXMR(s.xmrPiconero)} XMR</b><span class="dim">swap ${short(id)}</span></div>`];
+  const sym = s.symbol || 'ETH', dec = s.decimals ?? 18;
+  const lines = [`<div class="row"><b>${e.fmtAmount(s.amountWei, dec)} ${sym} → ${m.fmtXMR(s.xmrPiconero)} XMR</b><span class="dim">swap ${short(id)}</span></div>`];
   const steps = { eth_locked: 1, xmr_seen: 2, ready: 3, claimed: 4, done: 5, refunded: 5 };
-  const names = ['Paid ETH into the contract', 'Monero arrived and confirmed', 'Contract set to ready', 'Seller collected the ETH and revealed its secret', s.state === 'refunded' ? 'ETH refunded to you' : 'Monero is yours'];
+  const names = [`Paid ${sym} into the contract`, 'Monero arrived and confirmed', 'Contract set to ready', `Seller collected the ${sym} and revealed its secret`, s.state === 'refunded' ? `${sym} refunded to you` : 'Monero is yours'];
   const cur = steps[s.state] || 0;
   lines.push('<ol class="steps">' + names.map((t, i) => `<li class="${i < cur ? 'done' : i === cur ? 'now' : ''}">${t}</li>`).join('') + '</ol>');
   if (s.note) lines.push(`<div class="note">${s.note}</div>`);
-  if (s.state === 'eth_locked') lines.push(`<div class="dim">Watching Monero address ${s.sharedAddress}<br>Seller's deadline ${when(s.timeout1)}. If nothing arrives by ${when(s.timeout1 - 600)}, you can take your ETH back.</div>`);
+  if (s.state === 'eth_locked') lines.push(`<div class="dim">Watching Monero address ${s.sharedAddress}<br>Seller's deadline ${when(s.timeout1)}. If nothing arrives by ${when(s.timeout1 - 600)}, you can take your ${sym} back.</div>`);
   if (s.state === 'claimed' || s.state === 'done') {
     lines.push(`<div class="keys"><b>Your Monero: ${m.fmtXMR(s.xmrPiconero)} XMR at</b><br><code>${s.sharedAddress}</code><br>
       Restore this as a wallet <i>from keys</i> in Feather, Cake, or the Monero GUI, then send it wherever you like. Nobody else can spend it.<br>
       private spend key <code>${s.finalSpendPriv}</code><br>private view key <code>${s.finalViewPriv}</code><br>restore height <code>${s.restoreHeight}</code></div>`);
     if (s.state === 'claimed') lines.push(`<button data-act="done">I have moved the Monero</button>`);
   }
-  if (s.state === 'eth_locked' || s.state === 'ready') lines.push(`<button data-act="refund" class="warn">Take my ETH back</button>`);
+  if (s.state === 'eth_locked' || s.state === 'ready') lines.push(`<button data-act="refund" class="warn">Take my ${sym} back</button>`);
   card.innerHTML = lines.join('');
   card.querySelectorAll('button').forEach((b) => { b.onclick = () => action(id, b.dataset.act); });
 }
