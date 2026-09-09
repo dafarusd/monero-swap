@@ -17,7 +17,7 @@ const state = {
   readProvider: null,
   offers: [],
   swaps: load(LS_SWAPS, {}),
-  settings: load(LS_SETTINGS, { node: 'http://127.0.0.1:8089', rpc: { 11155111: 'https://ethereum-sepolia-rpc.publicnode.com', 8453: 'https://mainnet.base.org' }, chainId: 11155111 }),
+  settings: load(LS_SETTINGS, { node: 'http://127.0.0.1:8089', rpc: { 11155111: 'https://ethereum-sepolia-rpc.publicnode.com', 84532: 'https://sepolia.base.org', 8453: 'https://mainnet.base.org' }, chainId: 11155111 }),
   timers: {},
 };
 

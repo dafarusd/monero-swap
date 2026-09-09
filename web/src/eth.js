@@ -6,7 +6,7 @@ import ABI from './XmrSwap.abi.json' with { type: 'json' };
 
 export const CHAINS = {
   11155111: { name: 'Sepolia (test)', explorer: 'https://sepolia.etherscan.io', xmrNet: 'stagenet', contract: '0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E' },
-  84532: { name: 'Base Sepolia (test)', explorer: 'https://sepolia.basescan.org', xmrNet: 'stagenet', contract: '' },
+  84532: { name: 'Base Sepolia (test)', explorer: 'https://sepolia.basescan.org', xmrNet: 'stagenet', contract: '0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755' },
   8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '' },
 };
 const LOG_CHUNK = 2000;
