@@ -4,7 +4,7 @@ Trade Monero for ETH or USDC with a stranger and trust nobody. The contract hold
 
 Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive. What's theirs and what changed is spelled out in [Credit](#credit) below.
 
-**Status: live on Base, unproven with real money.** The contract is deployed on Base mainnet. Five swaps and one refund have run end to end on test networks — Sepolia, Base Sepolia, Monero stagenet, ETH and a test token, command line and browser. No real-money swap has happened yet. Nothing is audited. Start small.
+**Status: live on Base, with a real offer on the board.** The contract is deployed on Base mainnet and the first seller — me — has Monero up for sale. Five swaps and one refund ran end to end on test networks first; no real-money swap has completed yet. Nothing is audited. Start small.
 
 ## How a swap works
 
@@ -31,15 +31,15 @@ The fee — 0.15% of the ETH side — comes out of the seller's payment at step 
 
 ## Buy Monero
 
-You need MetaMask (or any browser wallet) with ETH on the right network, and a Monero wallet to receive into.
+You need MetaMask (or any browser wallet) with ETH on Base, and a Monero wallet to receive into.
 
-Open the page, connect the wallet, pick an offer, pay. Keep the tab open until step 5 above. When the seller collects, the page shows you a private spend key and view key. Restore them as a wallet *from keys* in Feather, Cake or the Monero GUI and send the coins wherever you like. Nobody else can spend them.
+Open **[the page](https://dafarusd.github.io/monero-swap/)**, connect the wallet, pick an offer, pay. Keep the tab open until step 5 above. When the seller collects, the page shows you a private spend key and view key. Restore them as a wallet *from keys* in Feather, Cake or the Monero GUI and send the coins wherever you like. Nobody else can spend them.
 
 Download the key backup the page offers. If you clear the site's storage before the swap finishes, the Monero is gone.
 
 ## Sell Monero
 
-You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`).
+You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. I'm moving mine to one.
 
 ```bash
 git clone https://github.com/dafarusd/monero-swap.git
@@ -67,6 +67,12 @@ To sell for a token instead, add `--asset` with the token's address and quote `-
 ```
 
 Buyers of a token offer approve the contract once, then pay. The fee comes out in the same token.
+
+To see who else is selling, list the open offers — every one carries its seller's address:
+
+```bash
+./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract 0x67fe8681563F37f2A8BBed84C85784a678FeC693   --monerod-host node.monerodevs.org --monerod-port 18089 offers
+```
 
 ## Deployments
 
