@@ -39,7 +39,7 @@ Download the key backup the page offers. If you clear the site's storage before 
 
 ## Sell Monero
 
-You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. I'm moving mine to one.
+You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. Mine runs on one, with its Monero and Base traffic sent through Tor so the machine's IP stays off the node it talks to.
 
 ```bash
 git clone https://github.com/dafarusd/monero-swap.git
@@ -119,6 +119,7 @@ If you learned something here, the people to thank are noot, dimalinux and the C
 - Not audited. The contract is under 400 lines and the tests pass, but nobody outside this repo has read it.
 - The buyer page can't send Monero yet. It hands you the keys; your own wallet does the sending.
 - The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
+- Your IP leaks to the Monero node and the Base RPC unless you route through Tor. Mine does — install `tor` and `torsocks`, run the wallet under `torsocks`, and start the seller with `HTTPS_PROXY=socks5://127.0.0.1:9050`. That hides the machine, not the swap: the ETH side is public on-chain either way.
 - Offers are single-use. Each swap gets fresh keys, and the contract refuses reused ones.
 - Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
 - One person built this, and every swap was replayed on test networks first. The test contracts are listed above and every swap is on those chains for anyone to read. Don't take my word for it.
