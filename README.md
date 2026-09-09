@@ -4,7 +4,7 @@ Trade Monero for ETH or USDC with a stranger and trust nobody. The contract hold
 
 Built on the [Athanor](https://github.com/AthanorLabs/atomic-swap) protocol (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive.
 
-**Status: test networks only.** Three swaps and one refund have run end to end on Sepolia + Monero stagenet. Nothing is audited. Nothing is on Base yet. Don't put real money near it.
+**Status: test networks only.** Five swaps and one refund have run end to end — on Sepolia and on Base Sepolia, against Monero stagenet, for ETH and for a test token, from the command line and from a browser with MetaMask. Nothing is audited. Nothing is on Base mainnet yet. Don't put real money near it.
 
 ## How a swap works
 
@@ -60,7 +60,24 @@ That prints a gas wallet address and a Monero wallet address. Fund the gas walle
 
 `--price` is how much Monero the buyer gets per 1 ETH. `--payout` is where your ETH goes — any wallet, it never touches the gas key. Leave it running. It keeps one offer live, serves whoever takes it, and picks up where it left off after a restart.
 
+To sell for a token instead, add `--asset` with the token's address and quote `--min`, `--max` and `--price` in that token:
+
+```bash
+  --asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --min 20 --max 500 --price 0.0066   # USDC on Base
+```
+
+Buyers of a token offer approve the contract once, then pay. The fee comes out in the same token.
+
 `CONTRACT_ADDRESS` is filled in here once the Base deploy is done.
+
+## Test deployments
+
+| Chain | Contract |
+|---|---|
+| Sepolia | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` |
+| Base Sepolia | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` |
+
+Both take a 0.15% fee to a throwaway test wallet. Monero side is stagenet.
 
 ## Run a relay
 
