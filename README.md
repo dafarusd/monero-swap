@@ -121,4 +121,6 @@ If you learned something here, the people to thank are noot, dimalinux and the C
 - The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
 - Offers are single-use. Each swap gets fresh keys, and the contract refuses reused ones.
 - Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
-- One person built this, with AI writing most of the code against a spec and every swap replayed on test networks. The test contracts are listed above and every swap is on those chains for anyone to read. Don't take my word for it.
+- One person built this, and every swap was replayed on test networks first. The test contracts are listed above and every swap is on those chains for anyone to read. Don't take my word for it.
+
+Built by [Dafarus](https://x.com/Dafarusd).
