@@ -336,25 +336,39 @@ func (m *Maker) setState(swapID, state string, mut func(*SwapRec)) error {
 
 // runSwap drives one swap through its states until it is claimed or recovered.
 func (m *Maker) runSwap(ctx context.Context, swapID string) error {
+	backoff := m.cfg.Poll
 	for {
 		s := m.swap(swapID)
+		var err error
 		switch s.State {
 		case StateXMRLockPending:
-			if err := m.lockXMR(ctx, s); err != nil {
-				return err
-			}
+			err = m.lockXMR(ctx, s)
 		case StateXMRLocked:
-			if err := m.awaitClaim(ctx, s); err != nil {
-				return err
-			}
+			err = m.awaitClaim(ctx, s)
 		case StateRecovering:
-			if err := m.recover(ctx, s); err != nil {
-				return err
-			}
+			err = m.recover(ctx, s)
 		case StateClaimed, StateRecovered:
 			return nil
 		default:
 			return fmt.Errorf("unknown state %q", s.State)
+		}
+		if err == nil {
+			backoff = m.cfg.Poll
+			continue
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// A failed call is not a failed swap. Record it, wait, try the same state again.
+		log.Printf("maker: swap %s in %s: %s (retrying in %s)", short(swapID), s.State, err, backoff)
+		_ = m.cfg.Store.Update(func(st *State) { st.Swaps[swapID].LastError = err.Error() })
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		if backoff < 5*time.Minute {
+			backoff *= 2
 		}
 	}
 }
@@ -398,7 +412,8 @@ func (m *Maker) lockXMR(ctx context.Context, s *SwapRec) error {
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("XMR was not paid in time; taker will refund, nothing lost")
+			log.Printf("maker: swap %s: XMR was not paid in time; the taker will refund, nothing is lost", short(s.SwapID))
+			return m.setState(s.SwapID, StateXMRLocked, nil) // awaitClaim sees the refund and closes it out
 		}
 		return m.setState(s.SwapID, StateXMRLocked, func(r *SwapRec) { r.XmrLockTxID = "manual" })
 	}

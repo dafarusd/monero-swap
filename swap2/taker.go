@@ -180,8 +180,16 @@ func (t *Taker) Resume(ctx context.Context, swapID string) error {
 			err = fmt.Errorf("unknown state %q", s.State)
 		}
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			log.Printf("taker: swap %s in %s: %s (retrying in %s)", short(swapID), s.State, err, t.cfg.Poll)
 			_ = t.cfg.Store.Update(func(st *State) { st.Swaps[swapID].LastError = err.Error() })
-			return err
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(t.cfg.Poll):
+			}
 		}
 	}
 }

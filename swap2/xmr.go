@@ -73,10 +73,14 @@ func WaitForXMR(
 	expected uint64,
 	deadline time.Time,
 ) (bool, error) {
-	conf := wc.CreateWalletConf(prefix)
-	view, err := monero.CreateViewOnlyWalletFromKeys(conf, viewAB, addr, restoreHeight)
+	var view monero.WalletClient
+	err := retry(ctx, 5, 15*time.Second, "open view-only wallet", func() error {
+		var e error
+		view, e = monero.CreateViewOnlyWalletFromKeys(wc.CreateWalletConf(prefix), viewAB, addr, restoreHeight)
+		return e
+	})
 	if err != nil {
-		return false, fmt.Errorf("open view-only wallet: %w", err)
+		return false, err
 	}
 	defer view.CloseAndRemoveWallet()
 
@@ -113,10 +117,14 @@ func SweepShared(
 	to *mcrypto.Address,
 ) ([]string, error) {
 	kp := mcrypto.NewPrivateKeyPair(spendAB, viewAB)
-	conf := wc.CreateWalletConf(prefix)
-	spend, err := monero.CreateSpendWalletFromKeys(conf, kp, restoreHeight)
+	var spend monero.WalletClient
+	err := retry(ctx, 5, 15*time.Second, "open spend wallet", func() error {
+		var e error
+		spend, e = monero.CreateSpendWalletFromKeys(wc.CreateWalletConf(prefix), kp, restoreHeight)
+		return e
+	})
 	if err != nil {
-		return nil, fmt.Errorf("open spend wallet: %w", err)
+		return nil, err
 	}
 	defer spend.CloseAndRemoveWallet()
 
@@ -129,4 +137,24 @@ func SweepShared(
 		ids = append(ids, t.TxID)
 	}
 	return ids, nil
+}
+
+// retry runs fn up to `attempts` times, waiting `wait` between failures.
+func retry(ctx context.Context, attempts int, wait time.Duration, what string, fn func() error) error {
+	var err error
+	for i := 1; i <= attempts; i++ {
+		if err = fn(); err == nil {
+			return nil
+		}
+		log.Printf("%s failed (attempt %d of %d): %s", what, i, attempts, err)
+		if i == attempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	return fmt.Errorf("%s: %w", what, err)
 }
