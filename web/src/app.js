@@ -35,7 +35,18 @@ async function init() {
   $('connectBtn').onclick = connectWallet;
   $('refreshBtn').onclick = refreshOffers;
   $('nodeUrl').onchange = () => { state.settings.nodeByChain = state.settings.nodeByChain || {}; state.settings.nodeByChain[currentChainId()] = $('nodeUrl').value.trim(); save(); };
-  $('chainSel').onchange = () => { state.settings.chainId = Number($('chainSel').value); save(); setupChain(); refreshOffers(); };
+  $('chainSel').onchange = async () => {
+    const chainId = Number($('chainSel').value);
+    state.settings.chainId = chainId; save();
+    if (state.wallet && state.wallet.chainId !== chainId) {
+      // ask the wallet to move to that network; it reloads the page when it does
+      try { await globalThis.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + chainId.toString(16) }] }); }
+      catch (err) { say(`Switch your wallet to ${e.CHAINS[chainId].name} to use it here.`, 'bad'); }
+      return;
+    }
+    setupChain(); refreshOffers();
+  };
+  if (globalThis.ethereum && globalThis.ethereum.on) globalThis.ethereum.on('chainChanged', () => location.reload());
   setupChain();
   renderSwaps();
   await reconnectSilently();
