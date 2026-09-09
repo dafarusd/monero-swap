@@ -47,16 +47,8 @@ func LoadAsset(ctx context.Context, ec *ethclient.Client, addr ethcommon.Address
 
 func (a Asset) unit() *big.Int { return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(a.Decimals)), nil) }
 
-// Parse turns "12.5" into base units.
-func (a Asset) Parse(s string) (*big.Int, error) {
-	f, ok := new(big.Float).SetPrec(256).SetString(s)
-	if !ok || f.Sign() < 0 {
-		return nil, fmt.Errorf("bad %s amount %q", a.Symbol, s)
-	}
-	f.Mul(f, new(big.Float).SetInt(a.unit()))
-	v, _ := f.Int(nil)
-	return v, nil
-}
+// Parse turns "12.5" into base units, exactly.
+func (a Asset) Parse(s string) (*big.Int, error) { return ParseDecimal(s, uint(a.Decimals)) }
 
 // Fmt prints base units as a decimal with the symbol.
 func (a Asset) Fmt(v *big.Int) string {

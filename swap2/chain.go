@@ -196,26 +196,33 @@ func (c *Chain) LogWatcher(
 	}
 }
 
-// ParseWei turns a decimal ETH string into wei.
-func ParseWei(eth string) (*big.Int, error) {
-	f, ok := new(big.Float).SetPrec(256).SetString(eth)
-	if !ok {
-		return nil, fmt.Errorf("bad amount %q", eth)
+// ParseDecimal turns a decimal string into an integer of base units, exactly (no floats).
+func ParseDecimal(s string, decimals uint) (*big.Int, error) {
+	r, ok := new(big.Rat).SetString(strings.TrimSpace(s))
+	if !ok || r.Sign() < 0 {
+		return nil, fmt.Errorf("bad amount %q", s)
 	}
-	f.Mul(f, big.NewFloat(1e18))
-	wei, _ := f.Int(nil)
-	return wei, nil
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	r.Mul(r, new(big.Rat).SetInt(scale))
+	if !r.IsInt() {
+		return nil, fmt.Errorf("amount %q has more than %d decimal places", s, decimals)
+	}
+	return r.Num(), nil
 }
+
+// ParseWei turns a decimal ETH string into wei.
+func ParseWei(eth string) (*big.Int, error) { return ParseDecimal(eth, 18) }
 
 // ParsePiconero turns a decimal XMR string into piconero.
 func ParsePiconero(xmr string) (uint64, error) {
-	f, ok := new(big.Float).SetPrec(128).SetString(xmr)
-	if !ok {
-		return 0, fmt.Errorf("bad amount %q", xmr)
+	v, err := ParseDecimal(xmr, 12)
+	if err != nil {
+		return 0, err
 	}
-	f.Mul(f, big.NewFloat(1e12))
-	p, _ := f.Uint64()
-	return p, nil
+	if !v.IsUint64() {
+		return 0, fmt.Errorf("amount %q too large", xmr)
+	}
+	return v.Uint64(), nil
 }
 
 // FmtXMR formats piconero as XMR.
