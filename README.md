@@ -1,51 +1,86 @@
-# ETH-XMR Atomic Swaps
+# monero-swap
 
-This is an implementation of ETH-XMR atomic swaps, currently in beta. It currently consists of `swapd` and `swapcli` binaries, the swap daemon and swap CLI tool respectively, which allow for nodes to discover each other over the p2p network, to query nodes for their current available offers, and the ability to make and take swap offers and perform the swap protocol. The `swapd` program has a JSON-RPC endpoint which the user can use to interact with it. `swapcli` is a command-line utility that interacts with `swapd` by performing RPC calls. 
+Trade Monero for ETH or USDC with a stranger and trust nobody. The contract holds the ETH, the Monero sits at an address both of you control, and the only way the seller gets paid is by handing you the key.
 
-## Swap instructions
+Built on the [Athanor](https://github.com/AthanorLabs/atomic-swap) protocol (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive.
 
-### Trying it on mainnet
+**Status: test networks only.** Three swaps and one refund have run end to end on Sepolia + Monero stagenet. Nothing is audited. Nothing is on Base yet. Don't put real money near it.
 
-To try the swap on Ethereum and Monero mainnet, follow the instructions [here](./docs/mainnet.md).
+## How a swap works
 
-### Trying it on Monero's stagenet and Ethereum's Sepolia testnet
+1. A seller runs a small program that posts an offer on the contract: how much Monero, at what price, min and max.
+2. A buyer opens the web page, picks an offer, and pays ETH into the contract from their own wallet. The page makes a one-time Monero key for this swap and keeps it in the browser.
+3. The seller's program sees the payment and sends the Monero to a fresh address that needs *both* one-time keys to spend. Neither side can move it alone.
+4. The buyer's page watches that address. After 10 confirmations it flips the contract to *ready*.
+5. The seller collects the ETH. Collecting reveals the seller's one-time key on-chain — the contract checks it against the Monero key before paying.
+6. The buyer's page reads that key, adds it to its own, and now holds the full spend key for the Monero.
 
-To try the swap on Stagenet/Sepolia, follow the instructions [here](./docs/stagenet.md).
+If the seller never sends, the buyer's ETH refunds after an hour. If the buyer vanishes, the seller collects after the deadline anyway. If the buyer refunds, that reveals *their* key and the seller takes the Monero back. Nobody can end up with nothing.
 
-### Trying it locally
+The fee — 0.15% of the ETH side — comes out of the seller's payment at step 5, to a wallet fixed when the contract was deployed. Refunds pay no fee.
 
-To try the swap locally with two nodes (maker and taker) on a development environment, follow the instructions [here](./docs/local.md).
+## What's in here
 
-## Protocol
+| Path | What | License |
+|---|---|---|
+| `contracts-v2/` | `XmrSwap.sol`, the Solidity contract. No owner, no upgrade. 36 Foundry tests. | MIT |
+| `web/` | The buyer page. Vanilla JS, ethers, noble ed25519. Runs in any browser with MetaMask. | MIT |
+| `relay/` | A 40-line relay so the page can read a Monero node from a browser. Cloudflare Worker or plain Node. | MIT |
+| `swap2/`, `cmd/monero-swap/` | The seller program (and a command-line buyer for testing). Go. | LGPL-3.0 |
+| everything else | Athanor's original code, kept for its Monero wallet library. | LGPL-3.0 |
 
-Please see the [protocol documentation](docs/protocol.md) for how it works.
+## Buy Monero
 
-## Additional documentation
+You need MetaMask (or any browser wallet) with ETH on the right network, and a Monero wallet to receive into.
 
-### Developer instructions
+Open the page, connect the wallet, pick an offer, pay. Keep the tab open until step 5 above. When the seller collects, the page shows you a private spend key and view key. Restore them as a wallet *from keys* in Feather, Cake or the Monero GUI and send the coins wherever you like. Nobody else can spend them.
 
-Please see the [developer docs](docs/developing.md).
+Download the key backup the page offers. If you clear the site's storage before the swap finishes, the Monero is gone.
 
-### RPC API
+## Sell Monero
 
-The swap process comes with a HTTP JSON-RPC API as well as a Websockets API. You can find the documentation [here](./docs/rpc.md).
+You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`).
 
-## Contributions
+```bash
+git clone https://github.com/dafarusd/monero-swap.git
+cd monero-swap
+./scripts/install-monero-linux.sh          # Monero wallet tools into ./monero-bin
+make build-swap                            # needs Go 1.21 — newer Go breaks the network layer
+./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract CONTRACT_ADDRESS \
+  --monerod-host node.monerodevs.org --monerod-port 18089 addresses
+```
 
-If you'd like to contribute, feel free to fork the repo and make a pull request. Please make sure the CI is passing - you can run `make build`, `make lint`, and `make test` to make sure the checks pass locally. Please note that any contributions you make will be licensed under LGPLv3.
+That prints a gas wallet address and a Monero wallet address. Fund the gas wallet with a little ETH. Then:
 
-## Contact
- 
-- [Matrix room](https://matrix.to/#/#ethxmrswap:matrix.org)
+```bash
+./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract CONTRACT_ADDRESS \
+  --monerod-host node.monerodevs.org --monerod-port 18089 \
+  maker run --payout YOUR_ETH_ADDRESS --min 0.01 --max 0.1 --price 15.5
+```
 
-## Donations
+`--price` is how much Monero the buyer gets per 1 ETH. `--payout` is where your ETH goes — any wallet, it never touches the gas key. Leave it running. It keeps one offer live, serves whoever takes it, and picks up where it left off after a restart.
 
-The work on this project has been funded previously by community grants. It is currently not funded; if you'd like to donate, you can do so at the following address:
-- XMR `8AYdE4Tzq3rQYh7QNHfHz8HqcgT9kcTcHMcRHL1LhVtqYwah27zwPYGdesBgK5PATvGBAd4BC1t2NfrqKQqDguybQrC1tZb`
-- ETH `0x39D3b8cc9D08fD83360dDaCFe054b7D6e7f2cA08`
+`CONTRACT_ADDRESS` is filled in here once the Base deploy is done.
 
-## GPLv3 Disclaimer 
+## Run a relay
 
-THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+Browsers can't call public Monero nodes directly, so the page reads the chain through a relay that forwards a short list of read-only calls. Yours or mine, it doesn't matter — it holds nothing.
 
-IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+```bash
+cd relay && npx wrangler deploy      # Cloudflare, free tier
+# or
+UPSTREAM=http://node.monerodevs.org:18089 node relay/local.mjs
+```
+
+Then put the relay URL in the box at the top of the page.
+
+## Limits, honestly
+
+- Not audited. The contract is under 400 lines and the tests pass, but nobody outside this repo has read it.
+- The buyer page can't send Monero yet. It hands you the keys; your own wallet does the sending.
+- The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
+- Offers are single-use. Each swap gets fresh keys, and the contract refuses reused ones.
+- Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
+- One person built this, with AI writing most of the code against a spec and every swap replayed on test networks. The run logs and transaction hashes are in the commit messages. Don't take my word for it.
+
+Built by [Dafarus](https://x.com/Dafarusd).

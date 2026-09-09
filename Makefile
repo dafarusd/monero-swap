@@ -105,3 +105,9 @@ mock:
 .PHONY: clean
 clean:
 	rm -r bin/
+
+# monero-swap: the seller/buyer program against XmrSwap (needs Go 1.21; newer Go breaks quic-go 0.39)
+.PHONY: build-swap
+build-swap:
+	@go version | grep -q 'go1.21' || { echo "need Go 1.21 (see README); found: $$(go version)"; exit 1; }
+	mkdir -p bin && go build -o bin/monero-swap ./cmd/monero-swap
