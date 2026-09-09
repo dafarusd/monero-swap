@@ -189,8 +189,9 @@ function offerBackup(id, rec) {
 function renderSwaps() {
   const box = $('swaps');
   box.innerHTML = '';
-  const ids = Object.keys(state.swaps).filter((k) => !k.startsWith('pending:'));
-  if (ids.length === 0) { box.innerHTML = '<p class="dim">No swaps yet.</p>'; return; }
+  const chainId = currentChainId();
+  const ids = Object.keys(state.swaps).filter((k) => !k.startsWith('pending:') && (state.swaps[k].chainId ?? chainId) === chainId);
+  if (ids.length === 0) { box.innerHTML = '<p class="dim">No swaps on this network yet.</p>'; return; }
   for (const id of ids.reverse()) {
     const s = state.swaps[id];
     const card = document.createElement('div');
