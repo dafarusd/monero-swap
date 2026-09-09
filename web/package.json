@@ -7,8 +7,9 @@
     "test": "test"
   },
   "scripts": {
-    "test": "node --test test/",
-    "build": "node build.mjs"
+    "test": "node --test test/monero.test.mjs",
+    "build": "node build.mjs",
+    "test:live": "node --test test/node.live.test.mjs test/eth.live.test.mjs"
   },
   "keywords": [],
   "author": "",
