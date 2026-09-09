@@ -46,14 +46,14 @@ git clone https://github.com/dafarusd/monero-swap.git
 cd monero-swap
 ./scripts/install-monero-linux.sh          # Monero wallet tools into ./monero-bin
 make build-swap                            # needs Go 1.21 — newer Go breaks the network layer
-./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract CONTRACT_ADDRESS \
+./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract 0x67fe8681563F37f2A8BBed84C85784a678FeC693 \
   --monerod-host node.monerodevs.org --monerod-port 18089 addresses
 ```
 
 That prints a gas wallet address and a Monero wallet address. Fund the gas wallet with a little ETH. Then:
 
 ```bash
-./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract CONTRACT_ADDRESS \
+./bin/monero-swap --env mainnet --eth-rpc https://mainnet.base.org --contract 0x67fe8681563F37f2A8BBed84C85784a678FeC693 \
   --monerod-host node.monerodevs.org --monerod-port 18089 \
   maker run --payout YOUR_ETH_ADDRESS --min 0.01 --max 0.1 --price 15.5
 ```
@@ -68,16 +68,16 @@ To sell for a token instead, add `--asset` with the token's address and quote `-
 
 Buyers of a token offer approve the contract once, then pay. The fee comes out in the same token.
 
-`CONTRACT_ADDRESS` is filled in here once the Base deploy is done.
 
-## Test deployments
+## Deployments
 
-| Chain | Contract |
-|---|---|
-| Sepolia | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` |
-| Base Sepolia | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` |
+| Chain | Contract | Fee |
+|---|---|---|
+| **Base** (mainnet) | `0x67fe8681563F37f2A8BBed84C85784a678FeC693` | 0.15% to `0x16F57804d30CF991cC006e0713294A6D52778260` |
+| Sepolia (test) | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` | 0.15% to a throwaway wallet |
+| Base Sepolia (test) | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` | 0.15% to a throwaway wallet |
 
-Both take a 0.15% fee to a throwaway test wallet. Monero side is stagenet.
+The Base contract has no owner and can't be changed. Test contracts pair with Monero stagenet.
 
 ## Run a relay
 
