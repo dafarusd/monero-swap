@@ -39,8 +39,18 @@ async function init() {
   $('chainSel').onchange = () => { state.settings.chainId = Number($('chainSel').value); save(); setupChain(); refreshOffers(); };
   setupChain();
   renderSwaps();
+  await reconnectSilently();
   await refreshOffers();
   for (const id of Object.keys(state.swaps)) resumeSwap(id);
+}
+
+// If the wallet already approved this page, pick it up again without a prompt (after a reload).
+async function reconnectSilently() {
+  if (!globalThis.ethereum) return;
+  try {
+    const accounts = await globalThis.ethereum.request({ method: 'eth_accounts' });
+    if (accounts && accounts.length) await connectWallet();
+  } catch { /* fine, the button still works */ }
 }
 
 function setupChain() {
