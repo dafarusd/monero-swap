@@ -82,7 +82,7 @@ To see who else is selling, list the open offers — every one carries its selle
 | Sepolia (test) | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` | 0.15% to a throwaway wallet |
 | Base Sepolia (test) | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` | 0.15% to a throwaway wallet |
 
-The Base contract has no owner and can't be changed. Test contracts pair with Monero stagenet.
+The Base contract has no owner and can't be changed. Source is verified on [Basescan](https://basescan.org/address/0x67fe8681563f37f2a8bbed84c85784a678fec693#code), so what you read there is what runs. Test contracts pair with Monero stagenet.
 
 ## Run a relay
 
