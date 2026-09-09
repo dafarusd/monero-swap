@@ -75,7 +75,7 @@ async function refreshOffers() {
   if (!state.contract) return;
   $('offers').innerHTML = '<p>Loading offers…</p>';
   try {
-    state.offers = await e.listOffers(e.contractAt(state.chain.contract, state.readProvider), 50000);
+    state.offers = await e.listOffers(e.contractAt(state.chain.contract, state.readProvider), 10000);
   } catch (err) { $('offers').innerHTML = `<p class="bad">Could not read offers: ${err.message}</p>`; return; }
   if (state.offers.length === 0) { $('offers').innerHTML = '<p>No open offers right now.</p>'; return; }
   $('offers').innerHTML = '';

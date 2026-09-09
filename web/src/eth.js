@@ -23,17 +23,19 @@ export async function connect() {
 export function contractAt(address, runner) { return new ethers.Contract(address, ABI, runner); }
 export const b32 = (bytes) => '0x' + Array.from(bytes, (x) => x.toString(16).padStart(2, '0')).join('');
 
-async function chunkedLogs(c, filter, from, to) {
+async function chunkedLogs(c, filter, from, to, concurrency = 5) {
+  const ranges = [];
+  for (let s = from; s <= to; s += LOG_CHUNK) ranges.push([s, Math.min(s + LOG_CHUNK - 1, to)]);
   const out = [];
-  for (let s = from; s <= to; s += LOG_CHUNK) {
-    const e = Math.min(s + LOG_CHUNK - 1, to);
-    out.push(...(await c.queryFilter(filter, s, e)));
+  for (let i = 0; i < ranges.length; i += concurrency) {
+    const batch = ranges.slice(i, i + concurrency).map(([s, e]) => c.queryFilter(filter, s, e));
+    for (const logs of await Promise.all(batch)) out.push(...logs);
   }
-  return out;
+  return out.sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
 }
 
 /** Open ETH offers posted in the last `blocksBack` blocks. */
-export async function listOffers(c, blocksBack = 50000) {
+export async function listOffers(c, blocksBack = 10000) {
   const provider = c.runner.provider || c.runner;
   const tip = await provider.getBlockNumber();
   const now = (await provider.getBlock('latest')).timestamp;
