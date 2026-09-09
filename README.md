@@ -99,5 +99,3 @@ Then put the relay URL in the box at the top of the page.
 - Offers are single-use. Each swap gets fresh keys, and the contract refuses reused ones.
 - Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
 - One person built this, with AI writing most of the code against a spec and every swap replayed on test networks. The run logs and transaction hashes are in the commit messages. Don't take my word for it.
-
-Built by [Dafarus](https://x.com/Dafarusd).
