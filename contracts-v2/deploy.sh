@@ -12,9 +12,14 @@ CHAIN=$(cast chain-id --rpc-url "$RPC")
 FROM=$(cast wallet address --private-key "0x$(tr -d '[:space:]' < "$KEYFILE" | sed 's/^0x//')")
 echo "chain $CHAIN, deployer $FROM, balance $(cast balance "$FROM" --rpc-url "$RPC" --ether) ETH"
 echo "fee ${FEE_BPS} bps -> $FEE_TO"
-OUT=$(forge create src/XmrSwap.sol:XmrSwap --rpc-url "$RPC" --private-key "0x$(tr -d '[:space:]' < "$KEYFILE" | sed 's/^0x//')" --broadcast --constructor-args "$FEE_BPS" "$FEE_TO" 2>&1)
-ADDR=$(echo "$OUT" | grep 'Deployed to' | awk '{print $3}')
-[ -n "$ADDR" ] || { echo "$OUT" | tail -5; exit 1; }
+for attempt in 1 2 3; do
+  OUT=$(forge create src/XmrSwap.sol:XmrSwap --rpc-url "$RPC" --private-key "0x$(tr -d '[:space:]' < "$KEYFILE" | sed 's/^0x//')" --broadcast --constructor-args "$FEE_BPS" "$FEE_TO" 2>&1)
+  ADDR=$(echo "$OUT" | grep 'Deployed to' | awk '{print $3}')
+  [ -n "$ADDR" ] && break
+  echo "forge create did not report an address (attempt $attempt):"; echo "$OUT" | grep -vE '^\s*[0-9]+ │|^\s*│|╭|╰|━|internal-function|help:' | tail -8
+  sleep 5
+done
+[ -n "$ADDR" ] || exit 1
 echo "deployed: $ADDR"
 echo "feeBps=$(cast call "$ADDR" 'feeBps()(uint16)' --rpc-url "$RPC")  feeRecipient=$(cast call "$ADDR" 'feeRecipient()(address)' --rpc-url "$RPC")"
 if [ -n "$APIKEY" ]; then
