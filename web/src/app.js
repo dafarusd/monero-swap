@@ -17,7 +17,7 @@ const state = {
   readProvider: null,
   offers: [],
   swaps: load(LS_SWAPS, {}),
-  settings: load(LS_SETTINGS, { node: '', rpc: { 11155111: 'https://ethereum-sepolia-rpc.publicnode.com', 84532: 'https://sepolia.base.org', 8453: 'https://mainnet.base.org' }, chainId: 11155111 }),
+  settings: load(LS_SETTINGS, { node: '', nodeByChain: {}, rpc: { 11155111: 'https://ethereum-sepolia-rpc.publicnode.com', 84532: 'https://sepolia.base.org', 8453: 'https://mainnet.base.org' }, chainId: 11155111 }),
   timers: {},
 };
 
@@ -31,11 +31,10 @@ function say(msg, kind = '') { const el = $('msg'); el.textContent = msg; el.cla
 // ---------------- setup
 
 async function init() {
-  $('nodeUrl').value = state.settings.node;
   $('chainSel').value = String(state.settings.chainId);
   $('connectBtn').onclick = connectWallet;
   $('refreshBtn').onclick = refreshOffers;
-  $('nodeUrl').onchange = () => { state.settings.node = $('nodeUrl').value.trim(); save(); };
+  $('nodeUrl').onchange = () => { state.settings.nodeByChain = state.settings.nodeByChain || {}; state.settings.nodeByChain[currentChainId()] = $('nodeUrl').value.trim(); save(); };
   $('chainSel').onchange = () => { state.settings.chainId = Number($('chainSel').value); save(); setupChain(); refreshOffers(); };
   setupChain();
   renderSwaps();
@@ -53,9 +52,16 @@ async function reconnectSilently() {
   } catch { /* fine, the button still works */ }
 }
 
+function currentChainId() { return state.wallet ? state.wallet.chainId : state.settings.chainId; }
+function relayUrl() {
+  const byChain = state.settings.nodeByChain || {};
+  return (byChain[currentChainId()] || (state.chain && state.chain.relay) || '').trim();
+}
+
 function setupChain() {
-  const chainId = state.wallet ? state.wallet.chainId : state.settings.chainId;
+  const chainId = currentChainId();
   state.chain = e.CHAINS[chainId];
+  $('nodeUrl').value = relayUrl();
   if (!state.chain || !state.chain.contract) { say(`No contract configured for chain ${chainId}.`, 'bad'); state.contract = null; return; }
   state.readProvider = new ethers.JsonRpcProvider(state.settings.rpc[chainId] || '', chainId);
   const runner = state.wallet ? state.wallet.signer : state.readProvider;
@@ -116,15 +122,15 @@ async function refreshOffers() {
 
 async function takeOffer(o, ethStr) {
   if (!state.wallet) { say('Connect your wallet first.', 'bad'); return; }
-  if (!state.settings.node) { say('Set a Monero node relay URL first (top of page).', 'bad'); return; }
+  if (!relayUrl()) { say('Set a Monero node relay URL first (top of page).', 'bad'); return; }
   let amount;
   try { amount = e.parseAmount(ethStr, o.asset.decimals); } catch { say('Bad amount.', 'bad'); return; }
   if (amount < o.min || amount > o.max) { say('Amount is outside the offer range.', 'bad'); return; }
 
   // Height first, so the scan later starts before the lock.
   let restoreHeight;
-  try { restoreHeight = Math.max(0, (await n.getHeight(state.settings.node)) - 20); }
-  catch (err) { say(`Cannot reach the Monero node relay at ${state.settings.node}: ${err.message}`, 'bad'); return; }
+  try { restoreHeight = Math.max(0, (await n.getHeight(relayUrl())) - 20); }
+  catch (err) { say(`Cannot reach the Monero node relay at ${relayUrl()}: ${err.message}`, 'bad'); return; }
 
   const k = m.generateKeys();
   const netId = m.NET[state.chain.xmrNet];
@@ -241,9 +247,9 @@ async function stepSwap(id) {
   if (s.state === 'eth_locked') {
     const viewAB = m.scalarAdd(m.unhex(s.myViewPriv), m.unhex(s.theirViewPriv));
     const { spendPub } = m.decodeAddress(s.sharedAddress);
-    const tip = await n.getHeight(state.settings.node);
+    const tip = await n.getHeight(relayUrl());
     if (tip > s.lastScanned) {
-      const hits = await n.scanRange(state.settings.node, s.lastScanned + 1, tip, viewAB, spendPub);
+      const hits = await n.scanRange(relayUrl(), s.lastScanned + 1, tip, viewAB, spendPub);
       const merged = [...s.hits.filter((h) => !h.inPool), ...hits].filter((h, i, a) => a.findIndex((x) => x.hash === h.hash) === i);
       setSwap(id, { hits: merged.map((h) => ({ ...h, amount: h.amount.toString() })), lastScanned: tip });
     }

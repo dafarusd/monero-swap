@@ -80,7 +80,7 @@ The Base contract has no owner and can't be changed. Test contracts pair with Mo
 
 ## Run a relay
 
-Browsers can't call public Monero nodes directly, so the page reads the chain through a relay that forwards a short list of read-only calls. Yours or mine, it doesn't matter — it holds nothing.
+Browsers can't call public Monero nodes directly, so the page reads the chain through a relay that forwards a short list of read-only calls. It holds nothing and sees only block data. The page comes prefilled with mine — `monero-relay.dafarusd.workers.dev` for Base, `monero-relay-stagenet.dafarusd.workers.dev` for the test networks — and you can swap in your own:
 
 ```bash
 cd relay && npx wrangler deploy      # Cloudflare, free tier
