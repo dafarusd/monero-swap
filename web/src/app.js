@@ -47,6 +47,7 @@ async function init() {
     setupChain(); refreshOffers();
   };
   if (globalThis.ethereum && globalThis.ethereum.on) globalThis.ethereum.on('chainChanged', () => location.reload());
+  $('restoreFile').onchange = (ev) => { const f = ev.target.files[0]; if (f) restoreFromFile(f); ev.target.value = ''; };
   setupChain();
   renderSwaps();
   await reconnectSilently();
@@ -165,7 +166,8 @@ async function takeOffer(o, ethStr) {
     delete state.swaps[tempId];
     Object.assign(rec, { state: 'eth_locked', swapId: r.swapId, timeout1: r.timeout1, timeout2: r.timeout2, createdBlock: r.block, takeTx: r.txHash, xmrPiconero: r.xmrPiconero.toString() });
     state.swaps[r.swapId] = rec; save();
-    say(`${o.asset.symbol} locked. Now watching for the Monero.`);
+    offerBackup(r.swapId, rec);
+    say(`${o.asset.symbol} locked. Save the backup link below — it's how you get your Monero back if this browser is lost.`);
     renderSwaps();
     resumeSwap(r.swapId);
   } catch (err) {
@@ -175,13 +177,63 @@ async function takeOffer(o, ethStr) {
 }
 
 function offerBackup(id, rec) {
+  // Replace any earlier link for the same swap (e.g. the pre-take, keys-only one).
+  document.querySelectorAll(`#backups a[data-key="${rec.mySpendPub}"]`).forEach((el) => el.remove());
   const blob = new Blob([JSON.stringify({ id, ...rec }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `xmrswap-keys-${id.slice(0, 12)}.json`;
-  a.textContent = 'Download a backup of this swap’s keys';
-  a.className = 'backup';
+  a.textContent = 'Download this swap’s backup — you need it to recover if you lose this browser';
+  a.className = 'backup warn';
+  a.dataset.key = rec.mySpendPub;
   $('backups').prepend(a);
+}
+
+// Load a swap from a downloaded backup file: restore its keys and pick the swap back up.
+// A complete backup carries its swapId; a keys-only one (saved before the take confirmed) is
+// matched back to its on-chain swap by the taker's one-time spend key.
+async function restoreFromFile(file) {
+  const rm = $('restoreMsg');
+  const show = (t, cls = 'note dim') => { rm.textContent = t; rm.className = cls; };
+  try {
+    const rec = JSON.parse(await file.text());
+    if (!rec || !rec.mySpendPriv || !rec.myViewPriv || !rec.sharedAddress || rec.chainId == null) {
+      show('That file is not a swap backup.', 'note bad'); return;
+    }
+    if (Number(rec.chainId) !== currentChainId()) {
+      const name = (e.CHAINS[rec.chainId] && e.CHAINS[rec.chainId].name) || `chain ${rec.chainId}`;
+      show(`This backup is for ${name}. Switch to that network at the top, then restore again.`, 'note bad'); return;
+    }
+    let id = rec.swapId || (rec.id && !String(rec.id).startsWith('pending:') ? rec.id : null);
+    if (!id) {
+      const found = await e.findSwapByTakerSpendPub(state.contract, rec.mySpendPub, 500000, (t) => show(t));
+      if (!found) {
+        state.swaps['pending:' + rec.mySpendPub] = { ...rec, state: rec.state || 'pending_take' };
+        save(); renderSwaps();
+        show('Saved the keys, but no matching swap is on the chain in the recent window. If you already paid, the take may be older than the scan — tell me and I can widen it.', 'note warn');
+        return;
+      }
+      id = found.swapId;
+      Object.assign(rec, {
+        swapId: found.swapId, timeout1: found.timeout1, timeout2: found.timeout2,
+        createdBlock: found.block, takeTx: found.txHash, xmrPiconero: found.xmrPiconero.toString(),
+      });
+      if (!rec.state || rec.state === 'pending_take') rec.state = 'eth_locked';
+    }
+    const existing = state.swaps[id];
+    if (existing && (existing.state === 'claimed' || existing.state === 'refunded')) {
+      show('You already have this finished swap in this browser.', 'note'); return;
+    }
+    // Re-scan the Monero window from the start so a lock that already landed is found.
+    rec.lastScanned = (rec.restoreHeight ?? 1) - 1;
+    rec.hits = [];
+    delete state.swaps['pending:' + rec.mySpendPub];
+    state.swaps[id] = rec;
+    save(); renderSwaps(); resumeSwap(id);
+    show('Restored. Watching this swap again.', 'note ok');
+  } catch (err) {
+    show(`Could not restore: ${err.message}`, 'note bad');
+  }
 }
 
 // ---------------- running swaps

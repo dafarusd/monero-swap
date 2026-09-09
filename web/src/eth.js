@@ -122,6 +122,27 @@ export async function findClaimed(c, swapId, fromBlock) {
   return { secret: logs[0].args.secret.slice(2), txHash: logs[0].transactionHash };
 }
 
+/** Finds a swap on-chain from the taker's one-time spend pubkey, for restoring a keys-only backup.
+ *  The pubkey is unique per swap and lives in the SwapCreated event, so this works from any wallet. */
+export async function findSwapByTakerSpendPub(c, spendPubHex, blocksBack = 500000, onStatus = () => {}) {
+  const provider = c.runner.provider || c.runner;
+  const tip = await provider.getBlockNumber();
+  const from = Math.max(0, tip - blocksBack);
+  const want = ('0x' + String(spendPubHex).replace(/^0x/, '')).toLowerCase();
+  onStatus(`Scanning the chain for your swap (blocks ${from} to ${tip})…`);
+  const logs = await chunkedLogs(c, c.filters.SwapCreated(), from, tip);
+  for (const l of logs) {
+    if (String(l.args.takerSpendPub).toLowerCase() === want) {
+      return {
+        swapId: l.args.swapId, xmrPiconero: l.args.xmrPiconero,
+        timeout1: Number(l.args.timeout1), timeout2: Number(l.args.timeout2),
+        block: l.blockNumber, txHash: l.transactionHash,
+      };
+    }
+  }
+  return null;
+}
+
 export async function chainTime(c) {
   const provider = c.runner.provider || c.runner;
   return (await provider.getBlock('latest')).timestamp;
