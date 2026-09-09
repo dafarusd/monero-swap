@@ -1,0 +1,44 @@
+{
+  "derived_view_2": "9f9ebe47768e84221ea4dfd33eaa73b460b64eb8fb353640becb5c145dfb5701",
+  "pairs": [
+    {
+      "spend_priv": "bf7143948a80c61ba632b370275cab37de34a639a289ade15f4d40102ad04c08",
+      "view_priv": "5f812c52228732b3ed92c42c59e4d245705fdb6fc5979487a4d3792231b28007",
+      "spend_pub": "c717d5899983ec8783bab91beeaf42d08616bac69c4acd31a539eeb59d98e49c",
+      "view_pub": "0a1922e3a658ab065a33cde9a040aaa00aed357e969c76de69684d313bc9ccea",
+      "address_stagenet": "59NjpxSEwoqPffLoyzy2NDbswdc1dKXyN9Jd7pPDfHijT6n8VdBibyk24dJ8QNbKDjTmceA13P3g9eCg1V4MDkyHTS47bUw",
+      "address_mainnet": "49Ahk7XHJCjPffLoyzy2NDbswdc1dKXyN9Jd7pPDfHijT6n8VdBibyk24dJ8QNbKDjTmceA13P3g9eCg1V4MDkyHTRQdQWb"
+    },
+    {
+      "spend_priv": "a517a06bd534fdc39e3498a2b59b9e452ee76300c556e6c285863d7c3ca0f30b",
+      "view_priv": "b55fbab4ebd788e061d9e24cf91ba0aa53001f590cf19785b3dcc01edc789808",
+      "spend_pub": "b3be3dd8f366f32c9bc8767c0dc5c1fe44d14335343ac2603f133655acf13da9",
+      "view_pub": "8b1c0882c500411c3d4e5d718640e4f38831321327bf7a72f198d7ec90cdb0ef",
+      "address_stagenet": "58eD5nFVocn8TkzvFTtDE8jXj7RCi94jbH6iDBDgbKE4VMnS74dV7yz5ixaj4CzBcPhjZoEQQz7aqLE6hWFK77u1U1WfSNP",
+      "address_mainnet": "48SAzwLYA1g8TkzvFTtDE8jXj7RCi94jbH6iDBDgbKE4VMnS74dV7yz5ixaj4CzBcPhjZoEQQz7aqLE6hWFK77u1U15KdpU"
+    },
+    {
+      "spend_priv": "cd6f33424b5daf38aafeb6f77b000c03a4a5cebb7262f624f55c7175c486d006",
+      "view_priv": "9f9ebe47768e84221ea4dfd33eaa73b460b64eb8fb353640becb5c145dfb5701",
+      "spend_pub": "456c6f363ed6fa318db3d234d6feacefdb6f1cfa74e1adfac50b1cda4a1f77a4",
+      "view_pub": "7078bd4c1bf48d1954859a0e9ba04a83e30d64e349072b6f55a8d3dfd2ab892c",
+      "address_stagenet": "54TjVGFdXJ99HjQyvPUwJ3h7v4tjgc2ctiwnFgDwRQNSUWGXE6a1iQc5EjbF1yYXYuP4UAaAcGofpKd5wTiHyAZe64C6LMA",
+      "address_mainnet": "44FhQRLfsh39HjQyvPUwJ3h7v4tjgc2ctiwnFgDwRQNSUWGXE6a1iQc5EjbF1yYXYuP4UAaAcGofpKd5wTiHyAZe5yGo6kT"
+    },
+    {
+      "spend_priv": "f5d479c60802e1e4831824e74b02c9f5a61a623bdb13eecb5c865c392434bf0d",
+      "view_priv": "92267e3de7ac4651d3ceec94af2009e78157ac63a37a398387c3c58752774904",
+      "spend_pub": "44cf459173ba89fe8a29353aabed398ff34f2819dec4f63fc855890ff5bc142d",
+      "view_pub": "29d4993ea38f0b7ad49d893476bc5ce4292d35e1bda96c94990c7ca90230798c",
+      "address_stagenet": "54SPE3UN5RJjaMXNKdd75SR5VyB9p2DtZBfmhaPCNUUs8Z9DCM8gNwLMYcP1zi5eQbfASsPWmfFvbRrawoHQogNUGpCsW4f",
+      "address_mainnet": "44EM9CZQRpCjaMXNKdd75SR5VyB9p2DtZBfmhaPCNUUs8Z9DCM8gNwLMYcP1zi5eQbfASsPWmfFvbRrawoHQogNUGp8vXeR"
+    }
+  ],
+  "shared01": {
+    "address_mainnet": "42K91RrJQpjHdMCmZwjGmjAbVfkj3PFruAf6BPfuMSEZWh3LuddrMEqGBW64twy9uvhJDiTVoeo498varD79Fm96PPwEHTh",
+    "address_stagenet": "52XB6GmG4RqHdMCmZwjGmjAbVfkj3PFruAf6BPfuMSEZWh3LuddrMEqGBW64twy9uvhJDiTVoeo498varD79Fm96PP7SQ1P",
+    "spend_priv": "77b5eda24552b1876eca5370fefd6a680c1c0a3a67e093a4e5d37d8c66704004",
+    "spend_pub": "12366f929e08c463678e5f059af1ae395cf6815c2ab8d639bbd4575d23eb36b1",
+    "view_priv": "270df1a9f3fba83b79cfafd6730694dbc35ffac8d1882c0d58b03a410d2b1900"
+  }
+}

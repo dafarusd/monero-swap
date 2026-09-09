@@ -1,0 +1,5 @@
+name = "monero-relay"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+[vars]
+UPSTREAM = "http://xmr-lux.boldsuck.org:38081"

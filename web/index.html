@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monero for ETH, no middleman</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1b1b1b; --dim:#666; --card:#fff; --line:#ddd; --ok:#1a7f37; --bad:#b3261e; --warn:#8a5a00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#eee; --dim:#9a9a9a; --card:#1e1e1e; --line:#333; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; margin: .2em 0; } h2 { font-size: 1.05rem; margin: 1.4em 0 .5em; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; margin:10px 0; overflow-wrap:anywhere; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:space-between; }
+  .dim { color:var(--dim); font-size:.9em; } .bad { color:var(--bad); } .ok { color:var(--ok); }
+  button { font:inherit; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  button.warn { color:var(--warn); }
+  input, select { font:inherit; padding:4px 6px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  input[type=number] { width: 7em; } #nodeUrl { width: 22em; }
+  code { font-size:.85em; word-break: break-all; }
+  .msg { min-height:1.4em; margin:8px 0; } .note { margin:6px 0; }
+  .steps { padding-left: 1.2em; margin:6px 0; } .steps li { color:var(--dim); } .steps li.done { color:var(--ok); } .steps li.now { color:var(--fg); font-weight:600; }
+  .keys { border:1px dashed var(--line); padding:8px; margin:8px 0; }
+  .backup { display:block; margin:4px 0; }
+  footer { margin: 2em 0 1em; color: var(--dim); font-size:.85em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Monero for ETH, no middleman</h1>
+  <p>Pick an offer, pay ETH into a contract, get Monero. The seller can't take your ETH without handing over the Monero, and if they vanish, your ETH comes back by itself. This page runs in your browser and keeps your keys here. It never sends them anywhere.</p>
+
+  <div class="card">
+    <div class="row">
+      <span>Network <select id="chainSel"><option value="11155111">Sepolia (test)</option><option value="8453">Base</option></select> <span id="chainName" class="dim"></span></span>
+      <span>Contract <a id="contractLink" target="_blank" rel="noopener"></a></span>
+    </div>
+    <div class="row">
+      <span>Monero node relay <input id="nodeUrl" placeholder="https://…"> <span class="dim">the page reads the Monero chain through this</span></span>
+    </div>
+    <div class="row">
+      <button id="connectBtn">Connect wallet</button><span id="account" class="dim"></span>
+    </div>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <h2>Open offers <button id="refreshBtn">Refresh</button></h2>
+  <div id="offers"></div>
+
+  <h2>Your swaps</h2>
+  <div id="backups"></div>
+  <div id="swaps"></div>
+
+  <footer>
+    Keys for your swaps are stored in this browser only. Clearing site data before a swap finishes loses the Monero. Download the backup when offered.<br>
+    Not audited. Test networks only until it is.
+  </footer>
+</main>
+<script src="./app.js"></script>
+</body>
+</html>
