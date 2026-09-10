@@ -106,11 +106,17 @@ This repo is a fork of [AthanorLabs/atomic-swap](https://github.com/AthanorLabs/
 
 What changed, and why:
 
-- **New contract.** `contracts-v2/XmrSwap.sol` replaces their `SwapCreator.sol`. The offer board moved on-chain, so there's no peer-to-peer network and no bootnodes to die — theirs were all dead by the time I tried. A fee, fixed at deploy, pays whoever keeps this running. The claim checks the revealed secret against the Monero key directly with an on-chain ed25519 multiply, which is cheap on Base; that removes the secp256k1 side and the cross-curve DLEq proof, the heaviest part of their client. One-time keys can't be reused across swaps. A seller's payout goes to any wallet, never the gas key.
+- **New contract.** `contracts-v2/XmrSwap.sol` replaces their `SwapCreator.sol`. The offer board moved on-chain, so there's no peer-to-peer network and no bootnodes to die — theirs were all dead by the time I tried. A fee, fixed at deploy, is how this one pays for itself. The claim checks the revealed secret against the Monero key directly with an on-chain ed25519 multiply, which is cheap on Base; that removes the secp256k1 side and the cross-curve DLEq proof, the heaviest part of their client. One-time keys can't be reused across swaps. A seller's payout goes to any wallet, never the gas key.
 - **New seller and buyer programs.** `swap2/` and `cmd/monero-swap/` are new. Their `swapd` is still in the tree but nothing here runs it. A failed call retries instead of ending the swap — a node outage killed their buyer's watcher mid-swap in my first run, and only their restart recovery saved it.
 - **A browser buyer.** `web/` is new. Their UI was unmaintained; this one needs only MetaMask.
 - **A relay.** `relay/` is new, because browsers can't call Monero nodes.
-- **Kept their license** for the Go code (LGPL-3.0). The contract, page and relay are MIT. The ed25519 library is Jan Vornberger's, MIT, via Wrapsynth.
+- **Kept their license** for the Go code (LGPL-3.0). The contract, page and relay are MIT. The ed25519 library is Jan Vornberger's, MIT, turned into a Solidity library by hbs in 2025 for MoneroSwap. The header of `contracts-v2/src/lib/Ed25519.sol` says so.
+
+## This is not the only one
+
+[MoneroSwap](https://codeberg.org/moneroswap/moneroswap) by hbs is an active EVM-to-Monero atomic swap. The Monero community funded it through a [CCS](https://ccs.getmonero.org/proposals/hbs-evm-atomic-swaps.html) for 135 XMR, paid out in early 2026, and it has been shown at EthCC and MoneroKon. It runs on Gnosis Chain, swaps a chain's native currency, and its web app needs only a browser and MetaMask. The ed25519 library in this contract is hbs's work.
+
+So this repo is a separate implementation, not a revival of anything abandoned. What actually differs: it runs on Base, it swaps ERC-20 tokens as well as ETH, and it funds itself with a 0.15% fee fixed in the contract rather than a grant. If you would rather use the community-funded one, use theirs.
 
 If you learned something here, the people to thank are noot, dimalinux and the ChainSafe team.
 
