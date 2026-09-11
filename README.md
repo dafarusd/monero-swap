@@ -130,4 +130,14 @@ If you learned something here, the people to thank are noot, dimalinux and the C
 - Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
 - One person built this, and every swap was replayed on test networks first. The test contracts are listed above and every swap is on those chains for anyone to read. Don't take my word for it.
 
-Built by [Dafarus](https://x.com/Dafarusd).
+---
+
+Built by Dafarus — local-first software and hardware you own.
+
+Follow the work on X: [@Dafarusd](https://x.com/Dafarusd)
+
+My companies:
+- Steel Valley Burners — [Facebook](https://www.facebook.com/steelvalleyburners)
+- Keephaven — [keephaven.co](https://keephaven.co) · [X](https://x.com/Keephaven) · [Facebook](https://www.facebook.com/profile.php?id=61592155452190)
+
+More work: [gate](https://github.com/dafarusd/gate) · [Sentinel](https://github.com/dafarusd/sentinel-public) · [Agent Ultra](https://github.com/dafarusd/Ultra-Agent-Release) · [EveryVoice](https://github.com/dafarusd/everyvoice) · [Mind Meld](https://github.com/dafarusd/mindmeld) · [monero-swap](https://github.com/dafarusd/monero-swap)
