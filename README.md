@@ -4,7 +4,7 @@ Trade Monero for ETH or USDC with a stranger and trust nobody. The contract hold
 
 Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive. What's theirs and what changed is spelled out in [Credit](#credit) below.
 
-**Status: live on Base, with a real offer on the board.** The contract is deployed on Base mainnet and the first seller — me — has Monero up for sale. Five swaps and one refund ran end to end on test networks first; no real-money swap has completed yet. Nothing is audited. Start small.
+**Status: contract live on Base; no seller online right now.** The contract is deployed on Base mainnet. My seller is offline while I work on the next version, so the board is empty. Five swaps and one refund ran end to end on test networks first; no real-money swap has completed yet. Nothing is audited. Start small.
 
 ## How a swap works
 
@@ -39,7 +39,7 @@ Download the key backup the page offers. If you clear the site's storage before 
 
 ## Sell Monero
 
-You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. Mine runs on one, with its Monero and Base traffic sent through Tor so the machine's IP stays off the node it talks to.
+You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. Mine ran on one, with its Monero and Base traffic sent through Tor so the machine's IP stayed off the node it talked to.
 
 ```bash
 git clone https://github.com/dafarusd/monero-swap.git
@@ -125,7 +125,7 @@ If you learned something here, the people to thank are noot, dimalinux and the C
 - Not audited. The contract is under 400 lines and the tests pass, but nobody outside this repo has read it.
 - The buyer page can't send Monero yet. It hands you the keys; your own wallet does the sending.
 - The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
-- Your IP leaks to the Monero node and the Base RPC unless you route through Tor. Mine does — install `tor` and `torsocks`, run the wallet under `torsocks`, and start the seller with `HTTPS_PROXY=socks5://127.0.0.1:9050`. That hides the machine, not the swap: the ETH side is public on-chain either way.
+- Your IP leaks to the Monero node and the Base RPC unless you route through Tor. Mine did — install `tor` and `torsocks`, run the wallet under `torsocks`, and start the seller with `HTTPS_PROXY=socks5://127.0.0.1:9050`. That hides the machine, not the swap: the ETH side is public on-chain either way.
 - Offers are single-use. Each swap gets fresh keys, and the contract refuses reused ones.
 - Base only, for now. Same contract works on any Ethereum-style chain; each one splits the sellers.
 - One person built this, and every swap was replayed on test networks first. The test contracts are listed above and every swap is on those chains for anyone to read. Don't take my word for it.
