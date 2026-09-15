@@ -169,9 +169,11 @@ What changed, and why:
 
 ## This is not the only one
 
-[MoneroSwap](https://codeberg.org/moneroswap/moneroswap) by hbs is an active EVM-to-Monero atomic swap. The Monero community funded it through a [CCS](https://ccs.getmonero.org/proposals/hbs-evm-atomic-swaps.html) for 135 XMR, paid out in early 2026, and it has been shown at EthCC and MoneroKon. It runs on Gnosis Chain, swaps a chain's native currency, and its web app needs only a browser and MetaMask. The ed25519 library in this contract is hbs's work.
+[MoneroSwap](https://codeberg.org/moneroswap/moneroswap) by hbs is an active EVM-to-Monero atomic swap. The Monero community funded it through a [CCS](https://ccs.getmonero.org/proposals/hbs-evm-atomic-swaps.html) for 135 XMR, paid out in early 2026, and it has been shown at EthCC and MoneroKon. It swaps a chain's native currency and it's deployed at the same address on Gnosis, Lens, Stable and Base. Worth being precise about, because I got it wrong publicly once: for a manual swap **both** sides are browser-only. The Monero seller uses a browser wallet plus a normal phone wallet — Cake, Monerujo — to scan a payment QR, and runs no daemon, no `monero-wallet-rpc` and no CLI. Only their market-making bot needs that. Mine needs a program on the selling side. The ed25519 library in this contract is hbs's work.
 
-So this repo is a separate implementation, not a revival of anything abandoned. What actually differs: it runs on Base, and it funds itself with a 0.15% fee fixed in the contract rather than a grant. v1 swapped ERC-20 tokens as well as ETH; v2 dropped them, because a token issuer can freeze a contract's balance and strand every swap sitting inside it. If you would rather use the community-funded one, use theirs.
+So this repo is a separate implementation, not a revival of anything abandoned. What actually differs, and it's a short list: this contract has no owner at all, where theirs has one who can change the coverage ratio, the delays and the oracle; and it funds itself with a 0.15% fee fixed in the contract, half of it going to a dev-fund multisig, rather than a grant that ends. The buyer's page also does its own Monero scanning in the browser instead of handing you a QR for a phone wallet.
+
+Base is not on that list. They're deployed on Base too, at the same address as everywhere else, and Gnosis gas is ten wei — their swaps cost less than mine do. v1 swapped ERC-20 tokens as well as ETH; v2 dropped them, because a token issuer can freeze a contract's balance and strand every swap sitting inside it, which is the argument their FAQ made before I started. If you would rather use the community-funded one, use theirs.
 
 If you learned something here, the people to thank are noot, dimalinux and the ChainSafe team.
 
