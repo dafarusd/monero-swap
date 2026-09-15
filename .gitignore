@@ -39,3 +39,6 @@ xmrtaker.key
 # IDE settings
 /.idea/
 bin/
+
+# Cloudflare wrangler build cache
+relay/.wrangler/

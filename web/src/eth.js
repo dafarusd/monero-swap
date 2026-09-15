@@ -1,28 +1,24 @@
 // Ethereum side of the buyer page: read offers, take one, set ready, watch the claim, refund.
 // Every function takes an ethers Contract so it works with MetaMask in the browser and a
 // plain provider in tests.
+//
+// This drives XmrSwapV2. Two things changed from v1 and both simplify this file:
+// offers are enumerable straight from storage, so finding one no longer means scanning logs
+// and an offer stays visible for its whole life; and the contract is ETH only, so the token
+// approve dance is gone. `assetInfo` stays as an ETH-shaped stub so the page code above it
+// keeps working unchanged.
 import { ethers } from 'ethers';
-import ABI from './XmrSwap.abi.json' with { type: 'json' };
+import ABI from './XmrSwapV2.abi.json' with { type: 'json' };
 
 export const CHAINS = {
-  11155111: { name: 'Sepolia (test)', explorer: 'https://sepolia.etherscan.io', xmrNet: 'stagenet', contract: '0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E', relay: 'https://monero-relay-stagenet.dafarusd.workers.dev' },
-  84532: { name: 'Base Sepolia (test)', explorer: 'https://sepolia.basescan.org', xmrNet: 'stagenet', contract: '0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755', relay: 'https://monero-relay-stagenet.dafarusd.workers.dev' },
-  8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '0x67fe8681563F37f2A8BBed84C85784a678FeC693', relay: 'https://monero-relay.dafarusd.workers.dev' },
+  8453: { name: 'Base', explorer: 'https://basescan.org', xmrNet: 'mainnet', contract: '0xC2b2e8D385309d6552657c0b80434ca616DE12fC', relay: 'https://monero-relay.dafarusd.workers.dev' },
 };
 const LOG_CHUNK = 2000;
-const ERC20_ABI = ['function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function balanceOf(address) view returns (uint256)', 'function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)'];
-const assetCache = new Map();
+const OFFER_PAGE = 50;
+const ETH = { address: ethers.ZeroAddress, symbol: 'ETH', decimals: 18 };
 
-/** {address, symbol, decimals} for ETH or a token; cached. */
-export async function assetInfo(runner, address) {
-  if (address === ethers.ZeroAddress) return { address, symbol: 'ETH', decimals: 18 };
-  const key = address.toLowerCase();
-  if (assetCache.has(key)) return assetCache.get(key);
-  const t = new ethers.Contract(address, ERC20_ABI, runner);
-  const info = { address, symbol: await t.symbol().catch(() => address.slice(0, 8)), decimals: Number(await t.decimals()) };
-  assetCache.set(key, info);
-  return info;
-}
+/** Kept for the page above: v2 is ETH only, so this always describes ETH. */
+export async function assetInfo() { return ETH; }
 export const fmtAmount = (v, decimals) => ethers.formatUnits(v, decimals);
 export const parseAmount = (s, decimals) => ethers.parseUnits(s, decimals);
 
@@ -49,55 +45,64 @@ async function chunkedLogs(c, filter, from, to, concurrency = 5) {
   return out.sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
 }
 
-/** Open ETH offers posted in the last `blocksBack` blocks. */
-export async function listOffers(c, blocksBack = 10000) {
+/** What one offer costs right now. Fixed-price offers carry their own number; feed-priced ones
+ *  resolve on-chain and can refuse (stale feed, or above the seller's ceiling), in which case the
+ *  offer is not takeable at the moment and we leave it out. */
+async function resolvePrice(c, o) {
+  if (o.xmrPerAsset !== 0n) return { price: o.xmrPerAsset, fixed: true };
+  try {
+    return { price: await c.priceOf(o.id), fixed: false };
+  } catch {
+    return null;
+  }
+}
+
+/** Every live offer, read straight from the contract's own list. */
+export async function listOffers(c) {
   const provider = c.runner.provider || c.runner;
-  const tip = await provider.getBlockNumber();
   const now = (await provider.getBlock('latest')).timestamp;
-  const from = Math.max(0, tip - blocksBack);
-  const logs = await chunkedLogs(c, c.filters.OfferPosted(), from, tip);
+  const total = Number(await c.offerCount());
   const offers = [];
-  for (const l of logs) {
-    const id = l.args.offerId;
-    const o = await c.offers(id);
-    if (!o.active || Number(o.expiry) <= now) continue;
-    const asset = await assetInfo(provider, o.asset);
-    offers.push({
-      id, maker: o.maker, payout: o.payout, min: o.minAmount, max: o.maxAmount, xmrPerAsset: o.xmrPerAsset, asset,
-      expiry: Number(o.expiry), t1: Number(o.timeout1Duration), t2: Number(o.timeout2Duration),
-      makerSpendPub: o.makerSpendPub, makerViewPriv: o.makerViewPriv, block: l.blockNumber,
-    });
+  for (let offset = 0; offset < total; offset += OFFER_PAGE) {
+    const page = await c.listOffers(offset, OFFER_PAGE);
+    for (const o of page) {
+      if (!o.active || Number(o.expiry) <= now) continue;
+      const p = await resolvePrice(c, o);
+      if (!p) continue;
+      offers.push({
+        id: o.id, maker: o.maker, payout: o.payout, min: o.minAmount, max: o.maxAmount,
+        xmrPerAsset: p.price, fixedPrice: p.fixed, asset: ETH,
+        expiry: Number(o.expiry), t1: Number(o.timeout1Duration), t2: Number(o.timeout2Duration),
+        makerSpendPub: o.makerSpendPub, makerViewPriv: o.makerViewPriv, bond: o.bond,
+      });
+    }
   }
   return offers.sort((a, b) => Number(b.xmrPerAsset - a.xmrPerAsset)); // best price first
 }
 
 export function xmrFor(amountWei, xmrPerAsset) { return (BigInt(amountWei) * BigInt(xmrPerAsset)) / 10n ** 18n; }
 
-/** Locks ETH or tokens against an offer (approving the token first if needed). Returns the SwapCreated details. */
+/** Locks ETH against an offer. Returns the SwapCreated details.
+ *  `minXmrPiconero` is the floor the contract enforces: for a fixed-price offer that is exactly the
+ *  quote, and for a feed-priced one we allow 1% of drift between quoting and mining rather than
+ *  letting the seller's feed move the price out from under the buyer. */
 export async function takeOffer(c, offerId, amountWei, spendPub, viewPriv, asset, onStatus = () => {}) {
-  let value = 0n;
-  if (asset.address === ethers.ZeroAddress) {
-    value = amountWei;
-  } else {
-    const signer = c.runner;
-    const t = new ethers.Contract(asset.address, ERC20_ABI, signer);
-    const me = await signer.getAddress();
-    const bal = await t.balanceOf(me);
-    if (bal < amountWei) throw new Error(`You hold ${fmtAmount(bal, asset.decimals)} ${asset.symbol}, need ${fmtAmount(amountWei, asset.decimals)}.`);
-    if ((await t.allowance(me, await c.getAddress())) < amountWei) {
-      onStatus(`First approve the contract to take your ${asset.symbol}…`);
-      await (await t.approve(await c.getAddress(), amountWei)).wait();
-      onStatus('Approved. Now confirm the payment…');
-    }
-  }
-  const tx = await c.takeOffer(offerId, amountWei, b32(spendPub), b32(viewPriv), { value });
+  const o = await c.getOffer(offerId);
+  const p = await resolvePrice(c, o);
+  if (!p) throw new Error('That offer cannot be priced right now — its price feed is stale or above the seller’s limit.');
+  const quoted = xmrFor(amountWei, p.price);
+  const floor = p.fixed ? quoted : (quoted * 99n) / 100n;
+  onStatus('Confirm the payment in your wallet…');
+
+  const tx = await c.takeOffer(offerId, b32(spendPub), b32(viewPriv), floor, { value: amountWei });
   const receipt = await tx.wait();
   for (const l of receipt.logs) {
-    let p;
-    try { p = c.interface.parseLog(l); } catch { continue; }
-    if (p && p.name === 'SwapCreated') {
+    let parsed;
+    try { parsed = c.interface.parseLog(l); } catch { continue; }
+    if (parsed && parsed.name === 'SwapCreated') {
       return {
-        swapId: p.args.swapId, xmrPiconero: p.args.xmrPiconero, timeout1: Number(p.args.timeout1), timeout2: Number(p.args.timeout2),
+        swapId: parsed.args.swapId, xmrPiconero: parsed.args.xmrPiconero,
+        timeout1: Number(parsed.args.timeout1), timeout2: Number(parsed.args.timeout2),
         block: receipt.blockNumber, txHash: receipt.hash,
       };
     }

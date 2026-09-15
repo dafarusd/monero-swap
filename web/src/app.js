@@ -17,7 +17,7 @@ const state = {
   readProvider: null,
   offers: [],
   swaps: load(LS_SWAPS, {}),
-  settings: load(LS_SETTINGS, { node: '', nodeByChain: {}, rpc: { 11155111: 'https://ethereum-sepolia-rpc.publicnode.com', 84532: 'https://sepolia.base.org', 8453: 'https://mainnet.base.org' }, chainId: 11155111 }),
+  settings: load(LS_SETTINGS, { node: '', nodeByChain: {}, rpc: { 8453: 'https://mainnet.base.org' }, chainId: 8453 }),
   timers: {},
 };
 
@@ -31,6 +31,14 @@ function say(msg, kind = '') { const el = $('msg'); el.textContent = msg; el.cla
 // ---------------- setup
 
 async function init() {
+  // A browser that used an earlier version has a network saved that may no longer be offered.
+  // Fall back to the first one we do support rather than showing "no contract configured".
+  if (!e.CHAINS[state.settings.chainId]) {
+    state.settings.chainId = Number(Object.keys(e.CHAINS)[0]);
+    state.settings.rpc = state.settings.rpc || {};
+    state.settings.rpc[state.settings.chainId] = state.settings.rpc[state.settings.chainId] || 'https://mainnet.base.org';
+    save();
+  }
   $('chainSel').value = String(state.settings.chainId);
   $('connectBtn').onclick = connectWallet;
   $('refreshBtn').onclick = refreshOffers;

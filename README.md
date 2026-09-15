@@ -1,10 +1,12 @@
 # monero-swap
 
-Trade Monero for ETH or USDC with a stranger and trust nobody. The contract holds the ETH, the Monero sits at an address both of you control, and the only way the seller gets paid is by handing you the key.
+Trade Monero for ETH with a stranger and trust nobody. The contract holds the ETH, the Monero sits at an address both of you control, and the only way the seller gets paid is by handing you the key.
 
 Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive. What's theirs and what changed is spelled out in [Credit](#credit) below.
 
-**Status: contract live on Base; no seller online right now.** The contract is deployed on Base mainnet. My seller is offline while I work on the next version, so the board is empty. Five swaps and one refund ran end to end on test networks first; no real-money swap has completed yet. Nothing is audited. Start small.
+**Status: v2 is live on Base. There is no seller program for it yet.** The v2 contract is deployed and verified on Base mainnet, and the web page talks to it. The seller program in this repo still speaks the v1 contract — it won't drive v2, and porting it is the next job. Until someone runs a v2 seller the board stays empty, so there is nothing for a buyer to take right now.
+
+Five swaps and one refund ran end to end on test networks, all against v1. No real-money swap has completed on either version. Nothing is audited. Start small.
 
 ## How a swap works
 
@@ -15,15 +17,19 @@ Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023)
 5. The seller collects the ETH. Collecting reveals the seller's one-time key on-chain — the contract checks it against the Monero key before paying.
 6. The buyer's page reads that key, adds it to its own, and now holds the full spend key for the Monero.
 
-If the seller never sends, the buyer's ETH refunds after an hour. If the buyer vanishes, the seller collects after the deadline anyway. If the buyer refunds, that reveals *their* key and the seller takes the Monero back. Nobody can end up with nothing.
+If the seller never sends, the buyer takes their ETH back — any time before the first deadline, and again after the second one. Between the two, the seller can still collect. If the buyer vanishes, the seller collects anyway. If the buyer refunds, that reveals *their* key and the seller takes the Monero back. Nobody can end up with nothing.
 
-The fee — 0.15% of the ETH side — comes out of the seller's payment at step 5, to a wallet fixed when the contract was deployed. Refunds pay no fee.
+Both deadlines are at least 24 hours in v2, up from an hour in v1. Base runs one sequencer, and forcing a transaction in from L1 takes about twelve hours — a one-hour window can close while you're being censored, before you can do anything about it.
+
+The fee — 0.15% of the ETH side — comes out of the seller's payment at step 5 and splits in half: half to me, half to a dev fund so other people working on this can be paid out of it. Both are multisig Safes, fixed when the contract was deployed, and neither can be redirected. The fee isn't sent anywhere during a swap; it's credited, and whoever it belongs to withdraws later. That way a fee address that can't receive ETH can never block someone else's claim. Refunds pay no fee.
+
+A seller also posts a bond to list an offer — 5% of the largest amount the offer accepts. It's held while the offer is live and returned in full when the swap settles, whichever way it settles. It's never paid to anyone else: this contract can't see Monero, so it can't tell a seller who didn't deliver from a buyer who walked away, and a bond it can't award fairly is one it has no business seizing. It's there to make spamming the board cost something.
 
 ## What's in here
 
 | Path | What | License |
 |---|---|---|
-| `contracts-v2/` | `XmrSwap.sol`, the Solidity contract. No owner, no upgrade. 36 Foundry tests. | MIT |
+| `contracts-v2/` | `XmrSwapV2.sol`, the live contract, plus `XmrSwap.sol` (v1). No owner, no upgrade. 83 Foundry tests, including two stateful invariant suites. | MIT |
 | `web/` | The buyer page. Vanilla JS, ethers, noble ed25519. Runs in any browser with MetaMask. | MIT |
 | `relay/` | A 40-line relay so the page can read a Monero node from a browser. Cloudflare Worker or plain Node. | MIT |
 | `swap2/`, `cmd/monero-swap/` | The seller program (and a command-line buyer for testing). Go. | LGPL-3.0 |
@@ -38,6 +44,8 @@ Open **[the page](https://dafarusd.github.io/monero-swap/)**, connect the wallet
 Download the key backup the page offers. If you clear the site's storage before the swap finishes, the Monero is gone.
 
 ## Sell Monero
+
+**This program drives the v1 contract only.** v2 changed the calls it makes — `takeOffer` lost an argument, offers are read from storage instead of logs, and tokens are gone — so pointing it at the v2 address won't work. Everything below is v1. If you want to sell against v2 today, you'd be writing that seller; the contract is deployed and the ABI is in `contracts-v2/out/`.
 
 You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. Mine ran on one, with its Monero and Base traffic sent through Tor so the machine's IP stayed off the node it talked to.
 
@@ -60,7 +68,7 @@ That prints a gas wallet address and a Monero wallet address. Fund the gas walle
 
 `--price` is how much Monero the buyer gets per 1 ETH. `--payout` is where your ETH goes — any wallet, it never touches the gas key. Leave it running. It keeps one offer live, serves whoever takes it, and picks up where it left off after a restart.
 
-To sell for a token instead, add `--asset` with the token's address and quote `--min`, `--max` and `--price` in that token:
+To sell for a token instead (v1 only — v2 is ETH only), add `--asset` with the token's address and quote `--min`, `--max` and `--price` in that token:
 
 ```bash
   --asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 --min 20 --max 500 --price 0.0066   # USDC on Base
@@ -76,17 +84,23 @@ To see who else is selling, list the open offers — every one carries its selle
 
 ## Deployments
 
-| Chain | Contract | Fee |
-|---|---|---|
-| **Base** (mainnet) | `0x67fe8681563F37f2A8BBed84C85784a678FeC693` | 0.15% to `0x16F57804d30CF991cC006e0713294A6D52778260` |
-| Sepolia (test) | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` | 0.15% to a throwaway wallet |
-| Base Sepolia (test) | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` | 0.15% to a throwaway wallet |
+| Chain | Contract | Version | Fee |
+|---|---|---|---|
+| **Base** (mainnet) | `0xC2b2e8D385309d6552657c0b80434ca616DE12fC` | **v2 — what the page uses** | 0.15%, split 50/50 |
+| Base (mainnet) | `0x67fe8681563F37f2A8BBed84C85784a678FeC693` | v1 — superseded | 0.15% to one wallet |
+| Sepolia (test) | `0xB96bDd5834F455C1A6edA15e5bAF25eFd506d61E` | v1 | 0.15% to a throwaway wallet |
+| Base Sepolia (test) | `0x97f8A483cFa8680F67aC24D83bbe4Fbc4f250755` | v1 | 0.15% to a throwaway wallet |
 
-The Base contract has no owner and can't be changed. Source is verified on [Basescan](https://basescan.org/address/0x67fe8681563f37f2a8bbed84c85784a678fec693#code), so what you read there is what runs. Test contracts pair with Monero stagenet.
+v2's two fee addresses, both Safe 1.4.1 multisigs on Base, both fixed at deploy:
+
+- founder — `0xa3B3dcA37aE4deB5B20369E25DA8756e829e2287`
+- dev fund — `0x61C9cc608Edf3Ba392B8c654171823984FA32240`
+
+Neither version has an owner and neither can be changed. v2's source is verified on [Basescan](https://basescan.org/address/0xc2b2e8d385309d6552657c0b80434ca616de12fc#code), so what you read there is what runs. v1 is still deployed and still works — it just isn't what the page talks to any more. The test contracts are v1 and pair with Monero stagenet.
 
 ## Run a relay
 
-Browsers can't call public Monero nodes directly, so the page reads the chain through a relay that forwards a short list of read-only calls. It holds nothing and sees only block data. The page comes prefilled with mine — `monero-relay.dafarusd.workers.dev` for Base, `monero-relay-stagenet.dafarusd.workers.dev` for the test networks — and you can swap in your own:
+Browsers can't call public Monero nodes directly, so the page reads the chain through a relay that forwards a short list of read-only calls. It holds nothing and sees only block data. The page comes prefilled with mine — `monero-relay.dafarusd.workers.dev` — and you can swap in your own:
 
 ```bash
 cd relay && npx wrangler deploy      # Cloudflare, free tier
@@ -106,7 +120,7 @@ This repo is a fork of [AthanorLabs/atomic-swap](https://github.com/AthanorLabs/
 
 What changed, and why:
 
-- **New contract.** `contracts-v2/XmrSwap.sol` replaces their `SwapCreator.sol`. The offer board moved on-chain, so there's no peer-to-peer network and no bootnodes to die — theirs were all dead by the time I tried. A fee, fixed at deploy, is how this one pays for itself. The claim checks the revealed secret against the Monero key directly with an on-chain ed25519 multiply, which is cheap on Base; that removes the secp256k1 side and the cross-curve DLEq proof, the heaviest part of their client. One-time keys can't be reused across swaps. A seller's payout goes to any wallet, never the gas key.
+- **New contract.** `contracts-v2/XmrSwap.sol` replaces their `SwapCreator.sol`. The offer board moved on-chain, so there's no peer-to-peer network and no bootnodes to die — theirs were all dead by the time I tried. A fee, fixed at deploy, is how this one pays for itself. The claim checks the revealed secret against the Monero key directly with an on-chain ed25519 multiply, which is cheap on Base; that removes the secp256k1 side and the cross-curve DLEq proof, the heaviest part of their client. One-time keys can't be reused across swaps. A seller's payout goes to any wallet, never the gas key. `XmrSwapV2.sol` is the one that's live now: the offer board is enumerable straight from storage, so finding an offer never depends on how long a node keeps its logs; the fee splits between two multisigs and is credited rather than sent, so no fee address can block a claim; timeouts start at 24 hours; sellers post a bond that's always returned; offers can price off a Chainlink-style feed instead of a fixed number; and tokens are gone.
 - **New seller and buyer programs.** `swap2/` and `cmd/monero-swap/` are new. Their `swapd` is still in the tree but nothing here runs it. A failed call retries instead of ending the swap — a node outage killed their buyer's watcher mid-swap in my first run, and only their restart recovery saved it.
 - **A browser buyer.** `web/` is new. Their UI was unmaintained; this one needs only MetaMask.
 - **A relay.** `relay/` is new, because browsers can't call Monero nodes.
@@ -116,13 +130,14 @@ What changed, and why:
 
 [MoneroSwap](https://codeberg.org/moneroswap/moneroswap) by hbs is an active EVM-to-Monero atomic swap. The Monero community funded it through a [CCS](https://ccs.getmonero.org/proposals/hbs-evm-atomic-swaps.html) for 135 XMR, paid out in early 2026, and it has been shown at EthCC and MoneroKon. It runs on Gnosis Chain, swaps a chain's native currency, and its web app needs only a browser and MetaMask. The ed25519 library in this contract is hbs's work.
 
-So this repo is a separate implementation, not a revival of anything abandoned. What actually differs: it runs on Base, it swaps ERC-20 tokens as well as ETH, and it funds itself with a 0.15% fee fixed in the contract rather than a grant. If you would rather use the community-funded one, use theirs.
+So this repo is a separate implementation, not a revival of anything abandoned. What actually differs: it runs on Base, and it funds itself with a 0.15% fee fixed in the contract rather than a grant. v1 swapped ERC-20 tokens as well as ETH; v2 dropped them, because a token issuer can freeze a contract's balance and strand every swap sitting inside it. If you would rather use the community-funded one, use theirs.
 
 If you learned something here, the people to thank are noot, dimalinux and the ChainSafe team.
 
 ## Limits, honestly
 
-- Not audited. The contract is under 400 lines and the tests pass, but nobody outside this repo has read it.
+- Not audited. v2 is 525 lines, all 83 tests pass, and twelve invariants hold across 128,000 fuzzed calls a run — but nobody outside this repo has read it. Tests only prove the things I thought to check.
+- No seller software exists for v2. The contract is live and the buyer page works, but nothing posts offers to it yet. Until that's written, or someone else writes it, the board is empty.
 - The buyer page can't send Monero yet. It hands you the keys; your own wallet does the sending.
 - The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
 - Your IP leaks to the Monero node and the Base RPC unless you route through Tor. Mine did — install `tor` and `torsocks`, run the wallet under `torsocks`, and start the seller with `HTTPS_PROXY=socks5://127.0.0.1:9050`. That hides the machine, not the swap: the ETH side is public on-chain either way.
