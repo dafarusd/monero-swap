@@ -4,9 +4,9 @@ Trade Monero for ETH with a stranger and trust nobody. The contract holds the ET
 
 Built on [Athanor](https://github.com/AthanorLabs/atomic-swap) (ChainSafe, 2023), which proved the cryptography on mainnet and then went quiet. This is the part they didn't finish: no peer network to die, no daemon holding your savings, a web page for the buyer, and a fee so someone has a reason to keep it alive. What's theirs and what changed is spelled out in [Credit](#credit) below.
 
-**Status: v2 is live on Base. There is no seller program for it yet.** The v2 contract is deployed and verified on Base mainnet, and the web page talks to it. The seller program in this repo still speaks the v1 contract — it won't drive v2, and porting it is the next job. Until someone runs a v2 seller the board stays empty, so there is nothing for a buyer to take right now.
+**Status: v2 is live on Base and there's a seller you can run. Nobody is running one right now.** The contract is deployed and verified on Base mainnet, the web page talks to it, and `monero-swap-v2` is the seller. I'm not hosting one at the moment, so the board is empty until somebody does — that can be you.
 
-Five swaps and one refund ran end to end on test networks, all against v1. No real-money swap has completed on either version. Nothing is audited. Start small.
+Five swaps and one refund ran end to end on test networks, all against v1. No real-money swap has completed on either version, and the v2 seller has not yet carried a swap from start to finish — it builds and its logic is the v1 seller's, which did run real swaps, but that is not the same as proof. Nothing is audited. Start small.
 
 ## How a swap works
 
@@ -32,7 +32,9 @@ A seller also posts a bond to list an offer — 5% of the largest amount the off
 | `contracts-v2/` | `XmrSwapV2.sol`, the live contract, plus `XmrSwap.sol` (v1). No owner, no upgrade. 83 Foundry tests, including two stateful invariant suites. | MIT |
 | `web/` | The buyer page. Vanilla JS, ethers, noble ed25519. Runs in any browser with MetaMask. | MIT |
 | `relay/` | A 40-line relay so the page can read a Monero node from a browser. Cloudflare Worker or plain Node. | MIT |
-| `swap2/`, `cmd/monero-swap/` | The seller program (and a command-line buyer for testing). Go. | LGPL-3.0 |
+| `swap2v2/`, `cmd/monero-swap-v2/` | The seller for the live v2 contract. Go. | LGPL-3.0 |
+| `xmrswap2/` | Generated Go bindings for `XmrSwapV2`. Rebuild with `make bindings-v2`. | LGPL-3.0 |
+| `swap2/`, `cmd/monero-swap/` | The v1 seller (and a command-line buyer for testing). Go. | LGPL-3.0 |
 | everything else | Athanor's original code, kept for its Monero wallet library. | LGPL-3.0 |
 
 ## Buy Monero
@@ -45,7 +47,46 @@ Download the key backup the page offers. If you clear the site's storage before 
 
 ## Sell Monero
 
-**This program drives the v1 contract only.** v2 changed the calls it makes — `takeOffer` lost an argument, offers are read from storage instead of logs, and tokens are gone — so pointing it at the v2 address won't work. Everything below is v1. If you want to sell against v2 today, you'd be writing that seller; the contract is deployed and the ABI is in `contracts-v2/out/`.
+You run one program on a machine that stays on. It holds a little ETH for gas and the bond, and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough.
+
+```bash
+git clone https://github.com/dafarusd/monero-swap.git
+cd monero-swap
+./scripts/install-monero-linux.sh          # Monero wallet tools into ./monero-bin
+make build-swap-v2                         # any recent Go; no version pin needed
+./bin/monero-swap-v2 --eth-rpc https://mainnet.base.org --contract 0xC2b2e8D385309d6552657c0b80434ca616DE12fC \
+  --monerod-host node.monerodevs.org --monerod-port 18089 addresses
+```
+
+That prints an ETH address and a Monero address, and tells you what the contract is already holding for you. Read the terms before funding anything — they're fixed in the contract and nobody can change them:
+
+```bash
+./bin/monero-swap-v2 --eth-rpc https://mainnet.base.org --contract 0xC2b2e8D385309d6552657c0b80434ca616DE12fC terms
+```
+
+**Fund the ETH address with gas *and* bond.** This is the one thing that's different from v1: posting an offer locks 5% of the offer's ceiling as a bond. A `--max 0.1` offer locks 0.05 × 0.1 = 0.005 ETH. You always get it back, whichever way the swap ends — the contract never seizes it — but it comes back as a *credit* inside the contract rather than a transfer, so something has to collect it. `maker run` does that on its own; `withdraw` does it by hand.
+
+Then leave it running:
+
+```bash
+./bin/monero-swap-v2 --eth-rpc https://mainnet.base.org --contract 0xC2b2e8D385309d6552657c0b80434ca616DE12fC \
+  --monerod-host node.monerodevs.org --monerod-port 18089 \
+  maker run --payout YOUR_ETH_ADDRESS --min 0.01 --max 0.1 --price 15.5
+```
+
+`--price` is how much Monero the buyer gets per 1 ETH. `--payout` is where your ETH goes — any wallet, it never touches the gas key. It keeps one offer live, serves whoever takes it, collects your bond, and picks up where it left off after a restart.
+
+Timeouts default to 24 hours each and the contract rejects anything shorter, so a swap you start is a swap you should expect to babysit for a day. That's deliberate: Base runs one sequencer, and forcing a transaction in from L1 takes about twelve hours.
+
+To see the board — read straight from contract storage, no log scanning:
+
+```bash
+./bin/monero-swap-v2 --eth-rpc https://mainnet.base.org --contract 0xC2b2e8D385309d6552657c0b80434ca616DE12fC offers
+```
+
+### Selling against v1
+
+The older `monero-swap` binary drives the **v1** contract only. v2 changed the calls it makes — `takeOffer` lost an argument, offers are read from storage instead of logs, and tokens are gone — so pointing it at the v2 address won't work. It needs Go 1.21, because it pulls in Athanor's peer-to-peer stack.
 
 You run one program on a machine that stays on. It holds a little ETH for gas (a few dollars) and either holds Monero to sell or asks you to pay each swap by hand from your own wallet (`--manual-xmr`). A Raspberry Pi 5 is enough: the install script fetches the arm64 Monero tools and the program cross-compiles with `GOARCH=arm64`. Mine ran on one, with its Monero and Base traffic sent through Tor so the machine's IP stayed off the node it talked to.
 
@@ -137,7 +178,9 @@ If you learned something here, the people to thank are noot, dimalinux and the C
 ## Limits, honestly
 
 - Not audited. v2 is 525 lines, all 83 tests pass, and twelve invariants hold across 128,000 fuzzed calls a run — but nobody outside this repo has read it. Tests only prove the things I thought to check.
-- No seller software exists for v2. The contract is live and the buyer page works, but nothing posts offers to it yet. Until that's written, or someone else writes it, the board is empty.
+- The v2 seller has never completed a swap. It compiles, and every step is ported from the v1 seller that did run real swaps on test networks, but nobody has run it against a real buyer. Treat the first one as a test and keep it small.
+- Nobody is running a v2 seller right now, so the board is empty. That's not a bug in the contract or the page — both work; there's just nobody selling.
+- Selling on v2 ties up capital. The bond is 5% of your offer's ceiling, locked while the offer is live. You always get it back, but it's idle while it sits there.
 - The buyer page can't send Monero yet. It hands you the keys; your own wallet does the sending.
 - The seller's program has to be online. That's not a bug, it's Monero: only a private key can move it, and a key has to live somewhere.
 - Your IP leaks to the Monero node and the Base RPC unless you route through Tor. Mine did — install `tor` and `torsocks`, run the wallet under `torsocks`, and start the seller with `HTTPS_PROXY=socks5://127.0.0.1:9050`. That hides the machine, not the swap: the ETH side is public on-chain either way.

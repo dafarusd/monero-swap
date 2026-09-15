@@ -111,3 +111,19 @@ clean:
 build-swap:
 	@go version | grep -q 'go1.21' || { echo "need Go 1.21 (see README); found: $$(go version)"; exit 1; }
 	mkdir -p bin && go build -o bin/monero-swap ./cmd/monero-swap
+
+# monero-swap-v2: the seller against XmrSwapV2 (the live contract). Builds on modern Go —
+# it does not pull in Athanor's p2p stack, so the Go 1.21 quic-go constraint does not apply.
+.PHONY: build-swap-v2
+build-swap-v2:
+	mkdir -p bin && go build -o bin/monero-swap-v2 ./cmd/monero-swap-v2
+
+# Regenerate the Go bindings for XmrSwapV2 from the Foundry build output.
+.PHONY: bindings-v2
+bindings-v2:
+	cd contracts-v2 && forge build
+	jq -r '.abi' contracts-v2/out/XmrSwapV2.sol/XmrSwapV2.json > /tmp/XmrSwapV2.abi
+	jq -r '.bytecode.object' contracts-v2/out/XmrSwapV2.sol/XmrSwapV2.json | sed 's/^0x//' > /tmp/XmrSwapV2.bin
+	$(GOPATH)/bin/abigen --abi /tmp/XmrSwapV2.abi --bin /tmp/XmrSwapV2.bin \
+		--pkg xmrswap2 --type XmrSwapV2 --out xmrswap2/xmrswap2.go
+	rm -f /tmp/XmrSwapV2.abi /tmp/XmrSwapV2.bin
